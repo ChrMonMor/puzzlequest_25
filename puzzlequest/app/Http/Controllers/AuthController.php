@@ -117,4 +117,33 @@ class AuthController extends Controller
 
         return response()->json(['message' => 'Account deleted']);
     }
+
+    public function logout()
+    {
+        try {
+            JWTAuth::parseToken()->invalidate(); // invalidate the current token
+            return response()->json(['message' => 'Successfully logged out']);
+        } catch (\Exception $e) {
+            return response()->json([
+                'error' => 'Failed to logout, token invalid or expired'
+            ], 500);
+        }
+    }
+
+
+    public function refresh()
+    {
+        try {
+            $newToken = JWTAuth::refresh(JWTAuth::getToken());
+
+            return response()->json([
+                'access_token' => $newToken,
+                'token_type' => 'bearer',
+                'expires_in' => JWTAuth::factory()->getTTL() * 60
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['error' => 'Failed to refresh token'], 401);
+        }
+    }
+
 }

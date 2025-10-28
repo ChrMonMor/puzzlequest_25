@@ -10,4 +10,9 @@ Route::middleware('auth:api')->group(function () {
     Route::get('/me', [AuthController::class, 'me']);
     Route::post('/update-profile', [AuthController::class, 'updateProfile']);
     Route::delete('/delete', [AuthController::class, 'deleteAccount']);
+    Route::post('/logout', [AuthController::class, 'logout']);
+    Route::post('/refresh', [AuthController::class, 'refresh']);
 });
+
+Route::middleware(['auth:api', 'refresh.token'])->get('/me', [AuthController::class, 'me']);
+
