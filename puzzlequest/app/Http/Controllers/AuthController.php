@@ -6,8 +6,9 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use App\Models\User;
-use JWTAuth;
+use Tymon\JWTAuth\Facades\JWTAuth;
 use Tymon\JWTAuth\Exceptions\JWTException;
+
 
 class AuthController extends Controller
 {
@@ -62,20 +63,24 @@ class AuthController extends Controller
     }
 
     public function login(Request $request)
-    {
-        $credentials = $request->only('user_email', 'user_password');
-        $user = User::where('email', $credentials['email'])->first();
+{
+    $credentials = $request->only('email', 'password');
+    $user = User::where('email', $credentials['email'])->first();
 
-        if (!$user || !$user->verified) {
-            return response()->json(['error' => 'Email not verified or invalid credentials'], 401);
-        }
+    if (!$user || !$user->verified) {
+        return response()->json(['error' => 'Email not verified or invalid credentials'], 401);
+    }
 
-        if (!$token = auth()->attempt($credentials)) {
+    try {
+        if (!$token = JWTAuth::attempt($credentials)) {
             return response()->json(['error' => 'Invalid credentials'], 401);
         }
-
-        return response()->json(['token' => $token]);
+    } catch (JWTException $e) {
+        return response()->json(['error' => 'Could not create token'], 500);
     }
+
+    return response()->json(['token' => $token]);
+}
 
     public function me()
     {
