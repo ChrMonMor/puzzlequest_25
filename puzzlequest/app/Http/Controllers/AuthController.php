@@ -34,7 +34,7 @@ class AuthController extends Controller
         $user = User::create([
             'user_email'    => $validated['email'],
             'user_password' => Hash::make($validated['password']),
-            'user_username' => $validated['username'],
+            'user_name' => $validated['username'],
             'user_verified' => false,
             'user_img'      => null, // optional default
         ]);
@@ -144,7 +144,7 @@ class AuthController extends Controller
         ]);
 
         if ($request->has('username')) {
-            $user->user_username = $request->username;
+            $user->user_name = $request->username;
         }
 
         if ($request->has('image')) {
