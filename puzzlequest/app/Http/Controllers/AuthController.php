@@ -5,6 +5,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Validator;
 use App\Models\User;
 use Tymon\JWTAuth\Facades\JWTAuth;
 use Tymon\JWTAuth\Exceptions\JWTException;
@@ -14,26 +15,37 @@ class AuthController extends Controller
 {
     public function register(Request $request)
     {
-        $validated = $request->validate([
-            'user_email' => 'required|email|unique:users',
-            'user_password' => 'required|min:6',
-            'user_username' => 'required|string|max:255'
+        
+        $validator = Validator::make($request->all(), [
+            'email' => 'required|email|unique:users,user_email',
+            'password' => 'required|min:6',
+            'username' => 'required|string|max:255'
         ]);
 
+        if ($validator->fails()) {
+            return response()->json([
+                'message' => 'Validation failed',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        $validated = $validator->validated();
+
         $user = User::create([
-            'user_email' => $validated['user_email'],
-            'user_password' => Hash::make($validated['user_password']),
-            'user_username' => $validated['user_username'],
-            'user_verified' => false
+            'user_email'    => $validated['email'],
+            'user_password' => Hash::make($validated['password']),
+            'user_username' => $validated['username'],
+            'user_verified' => false,
+            'user_img'      => null, // optional default
         ]);
 
         // Send verification email
         $token = Str::random(60);
         $verifyUrl = url("/api/verify-email?email={$user->user_email}&token={$token}");
 
-        cache()->put('verify_' . $user->user_email, $token, 3600); // 1h token lifetime
+        cache()->put('verify_' . $user->user_email, $token, 3600); // valid for 1 hour
 
-        Mail::raw("Click to verify your email: $verifyUrl", function($message) use ($user) {
+        Mail::raw("Click to verify your email: $verifyUrl", function ($message) use ($user) {
             $message->to($user->user_email)
                     ->subject('Verify your email address');
         });
@@ -43,7 +55,7 @@ class AuthController extends Controller
 
     public function verifyEmail(Request $request)
     {
-        $email = $request->query('user_email');
+        $email = $request->query('email');
         $token = $request->query('token');
 
         $cachedToken = cache()->get('verify_' . $email);
@@ -63,46 +75,81 @@ class AuthController extends Controller
     }
 
     public function login(Request $request)
-{
-    $credentials = $request->only('email', 'password');
-    $user = User::where('email', $credentials['email'])->first();
+    {
+        // Validate input
+        $request->validate([
+            'email' => 'required|email',
+            'password' => 'required|string|min:6',
+        ]);
 
-    if (!$user || !$user->verified) {
-        return response()->json(['error' => 'Email not verified or invalid credentials'], 401);
-    }
+        // Map request to your DB column names
+        $credentials = [
+            'user_email' => $request->input('email'),
+            'password'   => $request->input('password') // JWTAuth expects 'password' key
+        ];
 
-    try {
-        if (!$token = JWTAuth::attempt($credentials)) {
-            return response()->json(['error' => 'Invalid credentials'], 401);
+        // Check if user exists
+        $user = User::where('user_email', $credentials['user_email'])->first();
+
+        if (!$user) {
+            return response()->json(['error' => 'User not found'], 404);
         }
-    } catch (JWTException $e) {
-        return response()->json(['error' => 'Could not create token'], 500);
-    }
 
-    return response()->json(['token' => $token]);
-}
+        if (!$user->user_verified) {
+            return response()->json(['error' => 'Email not verified'], 401);
+        }
+
+        try {
+            // Attempt to create a JWT token
+            if (!$token = JWTAuth::attempt($credentials)) {
+                return response()->json(['error' => 'Invalid credentials'], 401);
+            }
+        } catch (JWTException $e) {
+            return response()->json(['error' => 'Could not create token'], 500);
+        }
+
+        return response()->json([
+            'message' => 'Login successful',
+            'token'   => $token,
+            'token_type' => 'bearer',
+            'expires_in' => (int) JWTAuth::factory()->getTTL() * 60
+        ]);
+
+    }
 
     public function me()
     {
-        return response()->json(auth()->user());
+        $user = auth()->user();
+        if (!$user) {
+            return response()->json([
+                'error' => 'Unauthorized. Please log in.'
+            ], 401);
+        }
+        return response()->json($user);
     }
 
     public function updateProfile(Request $request)
     {
-        $user = auth()->user();
+        $user = auth('api')->user();
+        
+        if (!$user) {
+            return response()->json([
+                'error' => 'Unauthorized. Please log in.'
+            ], 401);
+        }
 
         $request->validate([
             'username' => 'sometimes|string|max:255',
-            'user_image' => 'sometimes|image|max:2048',
+            'image' => 'sometimes|string|max:255',
         ]);
 
         if ($request->has('username')) {
-            $user->username = $request->username;
+            $user->user_username = $request->username;
         }
 
-        if ($request->hasFile('user_image')) {
-            $path = $request->file('user_image')->store('user_images', 'public');
-            $user->user_image = $path;
+        if ($request->has('image')) {
+            $path =  $request->input('user_img');
+            $user->user_img = $path;
         }
 
         $user->save();
@@ -112,7 +159,7 @@ class AuthController extends Controller
 
     public function deleteAccount()
     {
-        $user = auth()->user();
+        $user = auth('api')->user();
         $user->delete();
 
         return response()->json(['message' => 'Account deleted']);
