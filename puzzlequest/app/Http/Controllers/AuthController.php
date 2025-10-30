@@ -85,7 +85,7 @@ class AuthController extends Controller
         // Map request to your DB column names
         $credentials = [
             'user_email' => $request->input('email'),
-            'password'   => $request->input('password') // JWTAuth expects 'password' key
+            'password'   => $request->input('password'),
         ];
 
         // Check if user exists
