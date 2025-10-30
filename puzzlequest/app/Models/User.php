@@ -15,6 +15,7 @@ class User extends Authenticatable implements JWTSubject
     protected $primaryKey = 'user_id';
     public $incrementing = false;
     protected $keyType = 'string';
+    public $timestamps = false; 
 
     protected $fillable = [
         'user_name',
@@ -30,9 +31,7 @@ class User extends Authenticatable implements JWTSubject
         'user_password',
     ];
 
-    public $timestamps = false; // Because you use custom datetime column
 
-    // Automatically generate UUID when creating a new user
     protected static function boot()
     {
         parent::boot();
@@ -42,6 +41,17 @@ class User extends Authenticatable implements JWTSubject
                 $model->{$model->getKeyName()} = (string) Str::uuid();
             }
         });
+    }
+
+    // Relationships
+    public function runs()
+    {
+        return $this->hasMany(Run::class, 'user_id', 'user_id');
+    }
+
+    public function histories()
+    {
+        return $this->hasMany(History::class, 'user_id', 'user_id');
     }
 
     // JWT Auth methods
