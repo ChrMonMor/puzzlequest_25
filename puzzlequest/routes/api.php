@@ -25,3 +25,6 @@ Route::middleware(['auth.api'])->group(function () {
 });
 
 Route::middleware(['auth.api', 'refresh.token'])->post('/user', [AuthController::class, 'me']);
+
+Route::post('/forgot-password', [AuthController::class, 'forgotPassword']);
+Route::post('/reset-password', [AuthController::class, 'resetPassword']);

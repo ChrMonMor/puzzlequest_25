@@ -9,6 +9,9 @@ use Illuminate\Support\Facades\Validator;
 use App\Models\User;
 use Tymon\JWTAuth\Facades\JWTAuth;
 use Tymon\JWTAuth\Exceptions\JWTException;
+use Illuminate\Support\Facades\DB;
+use Carbon\Carbon;
+
 
 
 class AuthController extends Controller
@@ -193,4 +196,63 @@ class AuthController extends Controller
         }
     }
 
+    public function forgotPassword(Request $request)
+    {
+        $request->validate([
+            'email' => 'required|email|exists:users,user_email',
+        ]);
+
+        $token = Str::random(64);
+
+        DB::table('password_resets')->updateOrInsert(
+            ['user_email' => $request->email],
+            [
+                'token' => Hash::make($token),
+                'created_at' => Carbon::now(),
+            ]
+        );
+
+        $resetUrl = url("/api/reset-password?token=$token&email={$request->email}");
+
+        Mail::raw("Click the link to reset your password: $resetUrl", function ($message) use ($request) {
+            $message->to($request->email)
+                    ->subject('Reset your password');
+        });
+
+        return response()->json(['message' => 'Password reset email sent.']);
+    }
+    public function resetPassword(Request $request)
+    {
+        $request->validate([
+            'email' => 'required|email|exists:users,user_email',
+            'token' => 'required|string',
+            'password' => 'required|string|min:6|confirmed',
+        ]);
+
+        $record = DB::table('password_resets')->where('user_email', $request->email)->first();
+
+        if (Carbon::parse($record->created_at)->addMinutes(60)->isPast()) {
+            return response()->json(['error' => 'Token expired'], 400);
+        }
+
+        if (!$record) {
+            return response()->json(['error' => 'Invalid token or email'], 400);
+        }
+
+        if (!Hash::check($request->token, $record->token)) {
+            return response()->json(['error' => 'Invalid or expired token'], 400);
+        }
+
+        // Update the user’s password
+        DB::table('users')
+            ->where('user_email', $request->email)
+            ->update([
+                'user_password' => Hash::make($request->password),
+            ]);
+
+        // Delete the token
+        DB::table('password_resets')->where('user_email', $request->email)->delete();
+
+        return response()->json(['message' => 'Password reset successfully.']);
+    }
 }
