@@ -22,7 +22,6 @@ class User extends Authenticatable implements JWTSubject
         'user_email',
         'user_password',
         'user_verified',
-        'user_joined',
         'user_img',
         'user_email_verified_at',
     ];
@@ -40,8 +39,10 @@ class User extends Authenticatable implements JWTSubject
             if (empty($model->{$model->getKeyName()})) {
                 $model->{$model->getKeyName()} = (string) Str::uuid();
             }
+            $model->user_joined = now();
         });
     }
+    
 
     // Relationships
     public function runs()
