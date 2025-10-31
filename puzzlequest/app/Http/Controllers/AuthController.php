@@ -10,7 +10,8 @@ use App\Models\User;
 use Tymon\JWTAuth\Facades\JWTAuth;
 use Tymon\JWTAuth\Exceptions\JWTException;
 use Illuminate\Support\Facades\DB;
-use Carbon\Carbon;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 
 
 
@@ -44,9 +45,11 @@ class AuthController extends Controller
 
         // Send verification email
         $token = Str::random(60);
-        $verifyUrl = url("/api/verify-email?email={$user->user_email}&token={$token}");
+        $hashedToken = Hash::make($token);
 
-        cache()->put('verify_' . $user->user_email, $token, 3600); // valid for 1 hour
+        $verifyUrl = url("/api/verify-email?email={$user->user_email}&token={$hashedToken}");
+
+        cache()->put('verify_' . $user->user_email, $hashedToken, 3600); // valid for 1 hour
 
         Mail::raw("Click to verify your email: $verifyUrl", function ($message) use ($user) {
             $message->to($user->user_email)
@@ -202,21 +205,18 @@ class AuthController extends Controller
             'email' => 'required|email|exists:users,user_email',
         ]);
 
-        $token = Str::random(64);
+        $email = $request->email;
 
-        DB::table('password_resets')->updateOrInsert(
-            ['user_email' => $request->email],
-            [
-                'token' => Hash::make($token),
-                'created_at' => Carbon::now(),
-            ]
-        );
+        $rawToken = Str::random(64);
 
-        $resetUrl = url("/api/reset-password?token=$token&email={$request->email}");
+        $hashedToken = Hash::make($rawToken);
 
-        Mail::raw("Click the link to reset your password: $resetUrl", function ($message) use ($request) {
-            $message->to($request->email)
-                    ->subject('Reset your password');
+        Cache::put('password_resets_' . $email, $hashedToken, now()->addHour());
+
+        $resetUrl = url("/api/reset-password?token=$rawToken&email=$email");
+
+        Mail::raw("Click the link to reset your password: $resetUrl", function ($message) use ($email) {
+            $message->to($email)->subject('Reset your password');
         });
 
         return response()->json(['message' => 'Password reset email sent.']);
@@ -229,29 +229,22 @@ class AuthController extends Controller
             'password' => 'required|string|min:6|confirmed',
         ]);
 
-        $record = DB::table('password_resets')->where('user_email', $request->email)->first();
+        $email = $request->email;
+        $token = $request->token;
 
-        if (Carbon::parse($record->created_at)->addMinutes(60)->isPast()) {
-            return response()->json(['error' => 'Token expired'], 400);
+        $hashedToken = Cache::get('password_resets_' . $email);
+
+        if (!$hashedToken || !Hash::check($token, $hashedToken)) {
+            return response()->json(['message' => 'Invalid or expired token'], 400);
         }
 
-        if (!$record) {
-            return response()->json(['error' => 'Invalid token or email'], 400);
-        }
-
-        if (!Hash::check($request->token, $record->token)) {
-            return response()->json(['error' => 'Invalid or expired token'], 400);
-        }
-
-        // Update the user’s password
         DB::table('users')
-            ->where('user_email', $request->email)
+            ->where('user_email', $email)
             ->update([
                 'user_password' => Hash::make($request->password),
             ]);
 
-        // Delete the token
-        DB::table('password_resets')->where('user_email', $request->email)->delete();
+        Cache::forget('password_resets_' . $email);
 
         return response()->json(['message' => 'Password reset successfully.']);
     }
