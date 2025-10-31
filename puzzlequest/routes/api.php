@@ -3,6 +3,15 @@
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\FlagController;
+use App\Http\Controllers\HistoryController;
+use App\Http\Controllers\HistoryFlagController;
+use App\Http\Controllers\QuestionController;
+use App\Http\Controllers\QuestionOptionController;
+use App\Http\Controllers\QuestionTypeController;
+use App\Http\Controllers\RunController;
+use App\Http\Controllers\RunTypeController;
+
 
 Route::get('/ping', function () {
     return response()->json(['message' => 'pong'], 200);
