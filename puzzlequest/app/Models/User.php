@@ -30,6 +30,14 @@ class User extends Authenticatable implements JWTSubject
         'user_password',
     ];
 
+    /**
+     * Casts
+     */
+    protected $casts = [
+        'user_verified' => 'boolean',
+        'user_email_verified_at' => 'datetime',
+    ];
+
 
     protected static function boot()
     {

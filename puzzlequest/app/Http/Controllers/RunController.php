@@ -6,6 +6,11 @@ use Illuminate\Http\Request;
 
 class RunController extends Controller
 {
+    public function __construct()
+    {
+        // Block session-only guests from mutating actions
+        $this->middleware(\App\Http\Middleware\BlockGuestMiddleware::class)->only(['store', 'update', 'destroy']);
+    }
     /**
      * Display a listing of the resource.
      */
