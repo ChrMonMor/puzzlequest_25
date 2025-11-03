@@ -13,16 +13,13 @@ return new class extends Migration
     {
         Schema::create('histories', function (Blueprint $table) {
             $table->uuid('history_id')->primary();
-            $table->uuid('user_id');
-            $table->uuid('run_id');
+            $table->uuid('user_id')->nullable();
+            $table->uuid('run_id')->nullable();
             $table->timestamp('history_start');
-            $table->timestamp('history_end');
+            $table->timestamp('history_end')->nullable();
             $table->timestamp('history_run_update');
             $table->string('history_run_type', 255);
-            $table->integer('history_run_position');
-
-            $table->foreign('user_id')->references('user_id')->on('users')->onDelete('cascade');
-            $table->foreign('run_id')->references('run_id')->on('runs')->onDelete('cascade');
+            $table->integer('history_run_position')->nullable();
         });
 
     }

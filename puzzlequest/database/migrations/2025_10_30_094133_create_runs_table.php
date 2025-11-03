@@ -25,7 +25,7 @@ return new class extends Migration
             $table->string('run_location', 3)->nullable();
             $table->timestamp('run_last_update')->nullable();
 
-            $table->foreign('user_id')->references('user_id')->on('users')->onDelete('cascade');
+            $table->foreign('user_id')->references('user_id')->on('users');
             $table->foreign('run_type')->references('run_type_id')->on('run_types');
         });
     }

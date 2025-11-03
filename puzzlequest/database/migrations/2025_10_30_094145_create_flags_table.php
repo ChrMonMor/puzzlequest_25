@@ -14,7 +14,7 @@ return new class extends Migration
         Schema::create('flags', function (Blueprint $table) {
             $table->integer('flag_id')->primary();
             $table->uuid('run_id');
-            $table->integer('flag_number');
+            $table->integer('flag_number')->nullable();
             $table->double('flag_long');
             $table->double('flag_lat');
 

@@ -17,7 +17,7 @@ return new class extends Migration
             $table->timestamp('history_flag_reached');
             $table->double('history_flag_long');
             $table->double('history_flag_lat');
-            $table->double('history_flag_distance');
+            $table->double('history_flag_distance')->nullable();
             $table->double('history_flag_type');
             $table->integer('history_flag_point');
 
