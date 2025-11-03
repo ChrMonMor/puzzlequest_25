@@ -5,49 +5,50 @@ namespace App\Http\Controllers;
 use App\Models\QuestionOption;
 use App\Models\Question;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Validator;
-use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Support\Facades\Auth;
 use Exception;
 
 class QuestionOptionController extends Controller
 {
     public function __construct()
     {
-        // Block session-only guests from mutating actions
+        $this->middleware('auth:api')->except(['index','show']);
         $this->middleware(\App\Http\Middleware\BlockGuestMiddleware::class)->only(['store', 'update', 'destroy']);
     }
-
-    // List all options for a question
-    public function index($question_id)
-    {
-        $options = QuestionOption::where('question_id', $question_id)->get();
-        return response()->json($options, 200);
-    }
-
-    // Show single option
-    public function show($option_id)
+    // List all question options
+    public function index()
     {
         try {
-            $option = QuestionOption::findOrFail($option_id);
-            return response()->json($option, 200);
-        } catch (ModelNotFoundException $e) {
-            return response()->json(['error' => 'Option not found'], 404);
+            $options = QuestionOption::with('question')->get();
+            return response()->json($options, 200);
+        } catch (Exception $e) {
+            return response()->json(['error' => 'Failed to fetch options', 'details' => $e->getMessage()], 500);
         }
     }
 
-    // Create single option
-    public function store(Request $request, $question_id)
+    // Show single option
+    public function show($id)
     {
         try {
-            $user = Auth::user();
-            $question = Question::findOrFail($question_id);
+            $option = QuestionOption::with('question')->findOrFail($id);
+            return response()->json($option, 200);
+        } catch (Exception $e) {
+            return response()->json(['error' => 'Option not found', 'details' => $e->getMessage()], 404);
+        }
+    }
 
-            if ($question->run->user_id !== $user->user_id) {
+    // Create option (only if user owns the question's run)
+    public function store(Request $request)
+    {
+        try {
+            $question = Question::findOrFail($request->input('question_id'));
+            if ($question->run->user_id !== Auth::id()) {
                 return response()->json(['error' => 'Unauthorized'], 403);
             }
 
             $validator = Validator::make($request->all(), [
+                'question_id' => 'required|exists:questions,question_id',
                 'question_option_text' => 'required|string',
             ]);
 
@@ -55,27 +56,21 @@ class QuestionOptionController extends Controller
                 return response()->json(['errors' => $validator->errors()], 422);
             }
 
-            $option = $question->options()->create([
-                'question_option_text' => $request->question_option_text
-            ]);
+            $option = QuestionOption::create($request->only(['question_id', 'question_option_text']));
+            $option->load('question');
 
             return response()->json(['message' => 'Option created', 'option' => $option], 201);
-
-        } catch (ModelNotFoundException $e) {
-            return response()->json(['error' => 'Question not found'], 404);
         } catch (Exception $e) {
             return response()->json(['error' => 'Failed to create option', 'details' => $e->getMessage()], 500);
         }
     }
 
-    // Update single option
-    public function update(Request $request, $option_id)
+    // Update option (only owner)
+    public function update(Request $request, $id)
     {
         try {
-            $user = Auth::user();
-            $option = QuestionOption::findOrFail($option_id);
-
-            if ($option->question->run->user_id !== $user->user_id) {
+            $option = QuestionOption::findOrFail($id);
+            if ($option->question->run->user_id !== Auth::id()) {
                 return response()->json(['error' => 'Unauthorized'], 403);
             }
 
@@ -87,109 +82,100 @@ class QuestionOptionController extends Controller
                 return response()->json(['errors' => $validator->errors()], 422);
             }
 
-            $option->update([
-                'question_option_text' => $request->question_option_text
-            ]);
+            $option->update($request->only('question_option_text'));
+            $option->load('question');
 
             return response()->json(['message' => 'Option updated', 'option' => $option], 200);
-
-        } catch (ModelNotFoundException $e) {
-            return response()->json(['error' => 'Option not found'], 404);
         } catch (Exception $e) {
             return response()->json(['error' => 'Failed to update option', 'details' => $e->getMessage()], 500);
         }
     }
 
-    // Delete single option
-    public function destroy($option_id)
+    // Delete option (only owner)
+    public function destroy($id)
     {
         try {
-            $user = Auth::user();
-            $option = QuestionOption::findOrFail($option_id);
-
-            if ($option->question->run->user_id !== $user->user_id) {
+            $option = QuestionOption::findOrFail($id);
+            if ($option->question->run->user_id !== Auth::id()) {
                 return response()->json(['error' => 'Unauthorized'], 403);
             }
 
             $option->delete();
             return response()->json(['message' => 'Option deleted'], 200);
-
-        } catch (ModelNotFoundException $e) {
-            return response()->json(['error' => 'Option not found'], 404);
         } catch (Exception $e) {
             return response()->json(['error' => 'Failed to delete option', 'details' => $e->getMessage()], 500);
         }
     }
 
-    // Bulk create options
-    public function bulkCreate(Request $request, $question_id)
+    // ---------------- Bulk Operations ----------------
+
+    public function bulkCreate(Request $request, $questionId)
     {
         try {
-            $user = Auth::user();
-            $question = Question::findOrFail($question_id);
-
-            if ($question->run->user_id !== $user->user_id) {
+            $question = Question::findOrFail($questionId);
+            if ($question->run->user_id !== Auth::id()) {
                 return response()->json(['error' => 'Unauthorized'], 403);
             }
 
-            $validator = Validator::make($request->all(), [
-                'options' => 'required|array|min:1',
-                'options.*.question_option_text' => 'required|string',
-            ]);
-
-            if ($validator->fails()) {
-                return response()->json(['errors' => $validator->errors()], 422);
-            }
-
+            $optionsData = $request->input('options', []);
             $createdOptions = [];
-            foreach ($request->options as $opt) {
-                $option = $question->options()->create([
-                    'question_option_text' => $opt['question_option_text']
+
+            foreach ($optionsData as $optData) {
+                $validator = Validator::make($optData, [
+                    'question_option_text' => 'required|string',
                 ]);
-                $createdOptions[] = $option;
+                if ($validator->fails()) continue;
+
+                $createdOptions[] = QuestionOption::create(array_merge($optData, ['question_id' => $questionId]));
             }
 
-            return response()->json([
-                'message' => 'Options created successfully',
-                'options' => $createdOptions
-            ], 201);
-
-        } catch (ModelNotFoundException $e) {
-            return response()->json(['error' => 'Question not found'], 404);
+            return response()->json(['message' => 'Options created', 'options' => $createdOptions], 201);
         } catch (Exception $e) {
-            return response()->json(['error' => 'Failed to create options', 'details' => $e->getMessage()], 500);
+            return response()->json(['error' => 'Failed to bulk create options', 'details' => $e->getMessage()], 500);
         }
     }
 
-    // Bulk delete options
-    public function bulkDelete(Request $request, $question_id)
+    public function bulkUpdate(Request $request, $questionId)
     {
         try {
-            $user = Auth::user();
-            $question = Question::findOrFail($question_id);
-
-            if ($question->run->user_id !== $user->user_id) {
+            $question = Question::findOrFail($questionId);
+            if ($question->run->user_id !== Auth::id()) {
                 return response()->json(['error' => 'Unauthorized'], 403);
             }
 
-            $validator = Validator::make($request->all(), [
-                'option_ids' => 'required|array|min:1',
-                'option_ids.*' => 'exists:question_options,question_option_id',
-            ]);
+            $optionsData = $request->input('options', []);
+            $updatedOptions = [];
 
-            if ($validator->fails()) {
-                return response()->json(['errors' => $validator->errors()], 422);
+            foreach ($optionsData as $optData) {
+                $option = QuestionOption::find($optData['option_id'] ?? null);
+                if (!$option || $option->question_id !== $questionId) continue;
+
+                $option->update($optData);
+                $updatedOptions[] = $option;
             }
 
-            $deleted = $question->options()->whereIn('question_option_id', $request->option_ids)->delete();
-
-            return response()->json(['message' => "$deleted options deleted successfully"], 200);
-
-        } catch (ModelNotFoundException $e) {
-            return response()->json(['error' => 'Question not found'], 404);
+            return response()->json(['message' => 'Options updated', 'options' => $updatedOptions], 200);
         } catch (Exception $e) {
-            return response()->json(['error' => 'Failed to delete options', 'details' => $e->getMessage()], 500);
+            return response()->json(['error' => 'Failed to bulk update options', 'details' => $e->getMessage()], 500);
         }
     }
 
+    public function bulkDelete(Request $request, $questionId)
+    {
+        try {
+            $question = Question::findOrFail($questionId);
+            if ($question->run->user_id !== Auth::id()) {
+                return response()->json(['error' => 'Unauthorized'], 403);
+            }
+
+            $optionIds = $request->input('option_ids', []);
+            $deletedCount = QuestionOption::where('question_id', $questionId)
+                ->whereIn('question_option_id', $optionIds)
+                ->delete();
+
+            return response()->json(['message' => "Deleted $deletedCount options"], 200);
+        } catch (Exception $e) {
+            return response()->json(['error' => 'Failed to bulk delete options', 'details' => $e->getMessage()], 500);
+        }
+    }
 }

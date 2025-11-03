@@ -2,64 +2,69 @@
 
 namespace App\Http\Controllers;
 
-
-
 use App\Models\Run;
 use App\Models\Flag;
+use App\Models\Question;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Validator;
-use Illuminate\Database\Eloquent\ModelNotFoundException;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Auth;
 use Exception;
-
 
 class RunController extends Controller
 {
     public function __construct()
     {
-        // Block session-only guests from mutating actions
+        $this->middleware('auth:api')->except(['index','show']);
         $this->middleware(\App\Http\Middleware\BlockGuestMiddleware::class)->only(['store', 'update', 'destroy']);
-        $this->middleware('auth:api')->except(['index', 'show']);
     }
-
-    /**
-     * List all runs (public)
-     */
+    // List all runs with related models
     public function index()
     {
-        $runs = Run::with(['flags', 'questions', 'histories', 'run_types'])->get();
-        return response()->json($runs, 200);
-    }
-
-    /**
-     * Show a single run (public)
-     */
-    public function show(Request $request)
-    {
         try {
-            $run = Run::with(['flags', 'questions', 'histories', 'run_types'])->findOrFail($request->run_id);
-            return response()->json($run, 200);
-        } catch (ModelNotFoundException $e) {
-            return response()->json(['error' => 'Run not found'], 404);
+            $runs = Run::with([
+                'runType',
+                'flags.questions.options',
+                'questions.options',
+                'questions.questionType'
+            ])->get();
+
+            return response()->json($runs, 200);
+        } catch (Exception $e) {
+            return response()->json(['error' => 'Failed to fetch runs', 'details' => $e->getMessage()], 500);
         }
     }
 
-    /**
-     * Create a new run (authenticated)
-     */
+    // Show single run
+    public function show($id)
+    {
+        try {
+            $run = Run::with([
+                'runType',
+                'flags.questions.options',
+                'questions.options',
+                'questions.questionType'
+            ])->findOrFail($id);
+
+            return response()->json($run, 200);
+        } catch (Exception $e) {
+            return response()->json(['error' => 'Run not found', 'details' => $e->getMessage()], 404);
+        }
+    }
+
+    // Create new run
     public function store(Request $request)
     {
         try {
-            $user = Auth::user();
+            $userId = Auth::id();
 
             $validator = Validator::make($request->all(), [
-                'run_title' => 'required|string|max:255',
-                'run_description' => 'nullable|string|max:1000',
                 'run_type' => 'required|exists:run_types,run_type_id',
-                'run_location' => 'nullable|string|max:255',
+                'run_title' => 'required|string|max:255',
+                'run_description' => 'nullable|string',
                 'run_img_icon' => 'nullable|string',
                 'run_img_front' => 'nullable|string',
+                'run_pin' => 'nullable|string',
+                'run_location' => 'nullable|string',
             ]);
 
             if ($validator->fails()) {
@@ -67,371 +72,231 @@ class RunController extends Controller
             }
 
             $run = Run::create(array_merge($request->only([
-                'run_title', 'run_description', 'run_type', 'run_location', 'run_img_icon', 'run_img_front'
-            ]), ['user_id' => $user->user_id, 'run_added' => now()]));
+                'run_type', 'run_title', 'run_description', 
+                'run_img_icon', 'run_img_front', 'run_pin', 'run_location'
+            ]), [
+                'user_id' => $userId,
+                'run_added' => now(),
+                'run_last_update' => now(),
+            ]));
 
-            $run->load(['flags', 'questions', 'histories', 'run_types']);
+            $run->load([
+                'runType',
+                'flags.questions.options',
+                'questions.options',
+                'questions.questionType'
+            ]);
 
-            return response()->json([
-                'message' => 'Run created successfully',
-                'run' => $run
-            ], 201);
-
+            return response()->json(['message' => 'Run created', 'run' => $run], 201);
         } catch (Exception $e) {
             return response()->json(['error' => 'Failed to create run', 'details' => $e->getMessage()], 500);
         }
     }
 
-    /**
-     * Update a run (authenticated, owner only)
-     */
-    public function update(Request $request)
+    // Update run (only owner)
+    public function update(Request $request, $id)
     {
         try {
-            $user = Auth::user();
-            $run = Run::findOrFail($request->run_id);
+            $run = Run::findOrFail($id);
 
-            if ($run->user_id !== $user->user_id) {
+            if ($run->user_id !== Auth::id()) {
                 return response()->json(['error' => 'Unauthorized'], 403);
             }
 
             $validator = Validator::make($request->all(), [
-                'run_title' => 'sometimes|string|max:255',
-                'run_description' => 'sometimes|string|max:1000',
                 'run_type' => 'sometimes|exists:run_types,run_type_id',
-                'run_location' => 'sometimes|string|max:255',
-                'run_img_icon' => 'sometimes|string',
-                'run_img_front' => 'sometimes|string',
+                'run_title' => 'sometimes|string|max:255',
+                'run_description' => 'nullable|string',
+                'run_img_icon' => 'nullable|string',
+                'run_img_front' => 'nullable|string',
+                'run_pin' => 'nullable|string',
+                'run_location' => 'nullable|string',
             ]);
 
             if ($validator->fails()) {
                 return response()->json(['errors' => $validator->errors()], 422);
             }
 
-            $run->update($request->only([
-                'run_title', 'run_description', 'run_type', 'run_location', 'run_img_icon', 'run_img_front'
+            $run->update(array_merge($request->only([
+                'run_type', 'run_title', 'run_description', 
+                'run_img_icon', 'run_img_front', 'run_pin', 'run_location'
+            ]), [
+                'run_last_update' => now(),
             ]));
 
-            $run->load(['flags', 'questions', 'histories', 'run_types']);
+            $run->load([
+                'runType',
+                'flags.questions.options',
+                'questions.options',
+                'questions.questionType'
+            ]);
 
-            return response()->json([
-                'message' => 'Run updated successfully',
-                'run' => $run
-            ], 200);
-
-        } catch (ModelNotFoundException $e) {
-            return response()->json(['error' => 'Run not found'], 404);
+            return response()->json(['message' => 'Run updated', 'run' => $run], 200);
         } catch (Exception $e) {
             return response()->json(['error' => 'Failed to update run', 'details' => $e->getMessage()], 500);
         }
     }
 
-    /**
-     * Delete a run (authenticated, owner only)
-     */
-    public function destroy(Request $request)
+    // Delete run (only owner)
+    public function destroy($id)
     {
         try {
-            $user = Auth::user();
-            $run = Run::findOrFail($request->run_id);
+            $run = Run::findOrFail($id);
 
-            if ($run->user_id !== $user->user_id) {
+            if ($run->user_id !== Auth::id()) {
                 return response()->json(['error' => 'Unauthorized'], 403);
             }
 
             $run->delete();
 
-            return response()->json(['message' => 'Run deleted successfully'], 200);
-
-        } catch (ModelNotFoundException $e) {
-            return response()->json(['error' => 'Run not found'], 404);
+            return response()->json(['message' => 'Run deleted'], 200);
         } catch (Exception $e) {
             return response()->json(['error' => 'Failed to delete run', 'details' => $e->getMessage()], 500);
         }
     }
 
-    // =====================================================
-    // BULK FLAG OPERATIONS
-    // =====================================================
+    // ---------------- Flags Bulk Operations ----------------
 
-    /**
-     * Bulk create flags for a run
-     */
-    public function addFlagsBulk(Request $request)
+    public function bulkFlags(Request $request, $runId)
     {
         try {
-            $user = Auth::user();
-            $run = Run::with('flags', 'run_types')->findOrFail($request->run_id);
-
-            if ($run->user_id !== $user->user_id) {
+            $run = Run::findOrFail($runId);
+            if ($run->user_id !== Auth::id()) {
                 return response()->json(['error' => 'Unauthorized'], 403);
             }
 
-            $validator = Validator::make($request->all(), [
-                'flags' => 'required|array|min:1',
-                'flags.*.flag_number' => 'required|integer|min:1',
-                'flags.*.flag_long' => 'required|numeric',
-                'flags.*.flag_lat' => 'required|numeric',
-            ]);
+            $flagsData = $request->input('flags', []);
+            $createdFlags = [];
 
-            if ($validator->fails()) {
-                return response()->json(['errors' => $validator->errors()], 422);
-            }
-
-            $flagsData = array_map(fn($f) => [
-                'run_id' => $request->run_id,
-                'flag_number' => $f['flag_number'],
-                'flag_long' => $f['flag_long'],
-                'flag_lat' => $f['flag_lat']
-            ], $request->flags);
-
-            DB::beginTransaction();
-            Flag::insert($flagsData);
-            DB::commit();
-
-            $run->load(['flags', 'questions', 'histories', 'run_types']);
-
-            return response()->json([
-                'message' => count($flagsData) . ' flags created successfully!',
-                'run' => $run
-            ], 201);
-
-        } catch (ModelNotFoundException $e) {
-            DB::rollBack();
-            return response()->json(['error' => 'Run not found'], 404);
-        } catch (Exception $e) {
-            DB::rollBack();
-            return response()->json(['error' => 'Failed to create flags', 'details' => $e->getMessage()], 500);
-        }
-    }
-
-    /**
-     * Bulk update flags for a run
-     */
-    public function updateFlagsBulk(Request $request)
-    {
-        try {
-            $user = Auth::user();
-            $run = Run::with('flags', 'run_types')->findOrFail($request->run_id);
-
-            if ($run->user_id !== $user->user_id) {
-                return response()->json(['error' => 'Unauthorized'], 403);
-            }
-
-            $validator = Validator::make($request->all(), [
-                'flags' => 'required|array|min:1',
-                'flags.*.flag_id' => 'required|exists:flags,flag_id',
-                'flags.*.flag_number' => 'sometimes|integer|min:1',
-                'flags.*.flag_long' => 'sometimes|numeric',
-                'flags.*.flag_lat' => 'sometimes|numeric',
-            ]);
-
-            if ($validator->fails()) {
-                return response()->json(['errors' => $validator->errors()], 422);
-            }
-
-            DB::beginTransaction();
-            foreach ($request->flags as $flagData) {
-                $flag = Flag::where('run_id', $request->run_id)->findOrFail($flagData['flag_id']);
-                $flag->update(array_filter($flagData, fn($k) => in_array($k, ['flag_number', 'flag_long', 'flag_lat']), ARRAY_FILTER_USE_KEY));
-            }
-            DB::commit();
-
-            $run->load(['flags', 'questions', 'histories', 'run_types']);
-
-            return response()->json([
-                'message' => 'Flags updated successfully!',
-                'run' => $run
-            ], 200);
-
-        } catch (ModelNotFoundException $e) {
-            DB::rollBack();
-            return response()->json(['error' => 'Run or flag not found'], 404);
-        } catch (Exception $e) {
-            DB::rollBack();
-            return response()->json(['error' => 'Failed to update flags', 'details' => $e->getMessage()], 500);
-        }
-    }
-
-    /**
-     * Bulk delete flags for a run
-     */
-    public function deleteFlagsBulk(Request $request)
-    {
-        try {
-            $user = Auth::user();
-            $run = Run::with('flags', 'run_types')->findOrFail($request->run_id);
-
-            if ($run->user_id !== $user->user_id) {
-                return response()->json(['error' => 'Unauthorized'], 403);
-            }
-
-            $validator = Validator::make($request->all(), [
-                'flag_ids' => 'required|array|min:1',
-                'flag_ids.*' => 'required|exists:flags,flag_id',
-            ]);
-
-            if ($validator->fails()) {
-                return response()->json(['errors' => $validator->errors()], 422);
-            }
-
-            DB::beginTransaction();
-            $deletedCount = Flag::where('run_id', $request->run_id)
-                ->whereIn('flag_id', $request->flag_ids)
-                ->delete();
-            DB::commit();
-
-            $run->load(['flags', 'questions', 'histories', 'run_types']);
-
-            return response()->json([
-                'message' => $deletedCount . ' flags deleted successfully!',
-                'run' => $run
-            ], 200);
-
-        } catch (ModelNotFoundException $e) {
-            DB::rollBack();
-            return response()->json(['error' => 'Run not found'], 404);
-        } catch (Exception $e) {
-            DB::rollBack();
-            return response()->json(['error' => 'Failed to delete flags', 'details' => $e->getMessage()], 500);
-        }
-    }
-    
-    /**
-     * Bulk create questions for a run
-     */
-    public function bulkCreateQuestions(Request $request, $run_id)
-    {
-        try {
-            $user = Auth::user();
-            $run = Run::findOrFail($run_id);
-
-            if ($run->user_id !== $user->user_id) {
-                return response()->json(['error' => 'Unauthorized'], 403);
-            }
-
-            $validator = Validator::make($request->all(), [
-                'questions' => 'required|array|min:1',
-                'questions.*.flag_id' => 'nullable|exists:flags,flag_id',
-                'questions.*.question_type' => 'required|exists:question_types,question_type_id',
-                'questions.*.question_text' => 'required|string',
-                'questions.*.question_answer' => 'nullable|string',
-            ]);
-
-            if ($validator->fails()) {
-                return response()->json(['errors' => $validator->errors()], 422);
-            }
-
-            $createdQuestions = [];
-            foreach ($request->questions as $q) {
-                $question = $run->questions()->create([
-                    'flag_id' => $q['flag_id'] ?? null,
-                    'question_type' => $q['question_type'],
-                    'question_text' => $q['question_text'],
-                    'question_answer' => $q['question_answer'] ?? null,
+            foreach ($flagsData as $flagData) {
+                $validator = Validator::make($flagData, [
+                    'flag_number' => 'required|integer',
+                    'flag_long' => 'required|numeric',
+                    'flag_lat' => 'required|numeric',
                 ]);
-                $question->load(['flag', 'questionType', 'options']);
-                $createdQuestions[] = $question;
+                if ($validator->fails()) continue;
+
+                $createdFlags[] = Flag::create(array_merge($flagData, ['run_id' => $runId]));
             }
 
-            return response()->json([
-                'message' => 'Questions created successfully',
-                'questions' => $createdQuestions
-            ], 201);
-
-        } catch (ModelNotFoundException $e) {
-            return response()->json(['error' => 'Run not found'], 404);
+            return response()->json(['message' => 'Flags created', 'flags' => $createdFlags], 201);
         } catch (Exception $e) {
-            return response()->json(['error' => 'Failed to create questions', 'details' => $e->getMessage()], 500);
+            return response()->json(['error' => 'Failed to bulk create flags', 'details' => $e->getMessage()], 500);
         }
     }
 
-    /**
-     * Bulk update questions for a run
-     */
-    public function bulkUpdateQuestions(Request $request, $run_id)
+    public function bulkUpdateFlags(Request $request, $runId)
     {
         try {
-            $user = Auth::user();
-            $run = Run::findOrFail($run_id);
-
-            if ($run->user_id !== $user->user_id) {
+            $run = Run::findOrFail($runId);
+            if ($run->user_id !== Auth::id()) {
                 return response()->json(['error' => 'Unauthorized'], 403);
             }
 
-            $validator = Validator::make($request->all(), [
-                'questions' => 'required|array|min:1',
-                'questions.*.question_id' => 'required|exists:questions,question_id',
-                'questions.*.flag_id' => 'nullable|exists:flags,flag_id',
-                'questions.*.question_type' => 'sometimes|exists:question_types,question_type_id',
-                'questions.*.question_text' => 'sometimes|string',
-                'questions.*.question_answer' => 'nullable|string',
-            ]);
+            $flagsData = $request->input('flags', []);
+            $updatedFlags = [];
 
-            if ($validator->fails()) {
-                return response()->json(['errors' => $validator->errors()], 422);
+            foreach ($flagsData as $flagData) {
+                $flag = Flag::find($flagData['flag_id'] ?? null);
+                if (!$flag || $flag->run_id !== $runId) continue;
+
+                $flag->update($flagData);
+                $updatedFlags[] = $flag;
             }
 
+            return response()->json(['message' => 'Flags updated', 'flags' => $updatedFlags], 200);
+        } catch (Exception $e) {
+            return response()->json(['error' => 'Failed to bulk update flags', 'details' => $e->getMessage()], 500);
+        }
+    }
+
+    public function bulkDeleteFlags(Request $request, $runId)
+    {
+        try {
+            $run = Run::findOrFail($runId);
+            if ($run->user_id !== Auth::id()) {
+                return response()->json(['error' => 'Unauthorized'], 403);
+            }
+
+            $flagIds = $request->input('flag_ids', []);
+            $deletedCount = Flag::where('run_id', $runId)->whereIn('flag_id', $flagIds)->delete();
+
+            return response()->json(['message' => "Deleted $deletedCount flags"], 200);
+        } catch (Exception $e) {
+            return response()->json(['error' => 'Failed to bulk delete flags', 'details' => $e->getMessage()], 500);
+        }
+    }
+
+    // ---------------- Questions Bulk Operations ----------------
+
+    public function bulkQuestions(Request $request, $runId)
+    {
+        try {
+            $run = Run::findOrFail($runId);
+            if ($run->user_id !== Auth::id()) {
+                return response()->json(['error' => 'Unauthorized'], 403);
+            }
+
+            $questionsData = $request->input('questions', []);
+            $createdQuestions = [];
+
+            foreach ($questionsData as $qData) {
+                $validator = Validator::make($qData, [
+                    'flag_id' => 'nullable|exists:flags,flag_id',
+                    'question_type' => 'required|exists:question_types,question_type_id',
+                    'question_text' => 'required|string',
+                    'question_answer' => 'nullable|string',
+                ]);
+                if ($validator->fails()) continue;
+
+                $createdQuestions[] = Question::create(array_merge($qData, ['run_id' => $runId]));
+            }
+
+            return response()->json(['message' => 'Questions created', 'questions' => $createdQuestions], 201);
+        } catch (Exception $e) {
+            return response()->json(['error' => 'Failed to bulk create questions', 'details' => $e->getMessage()], 500);
+        }
+    }
+
+    public function bulkUpdateQuestions(Request $request, $runId)
+    {
+        try {
+            $run = Run::findOrFail($runId);
+            if ($run->user_id !== Auth::id()) {
+                return response()->json(['error' => 'Unauthorized'], 403);
+            }
+
+            $questionsData = $request->input('questions', []);
             $updatedQuestions = [];
 
-            foreach ($request->questions as $q) {
-                $question = $run->questions()->findOrFail($q['question_id']);
+            foreach ($questionsData as $qData) {
+                $question = Question::find($qData['question_id'] ?? null);
+                if (!$question || $question->run_id !== $runId) continue;
 
-                $question->update([
-                    'flag_id' => $q['flag_id'] ?? $question->flag_id,
-                    'question_type' => $q['question_type'] ?? $question->question_type,
-                    'question_text' => $q['question_text'] ?? $question->question_text,
-                    'question_answer' => $q['question_answer'] ?? $question->question_answer,
-                ]);
-
-                $question->load(['flag', 'questionType', 'options']);
+                $question->update($qData);
                 $updatedQuestions[] = $question;
             }
 
-            return response()->json([
-                'message' => 'Questions updated successfully',
-                'questions' => $updatedQuestions
-            ], 200);
-
-        } catch (ModelNotFoundException $e) {
-            return response()->json(['error' => 'Run or question not found'], 404);
+            return response()->json(['message' => 'Questions updated', 'questions' => $updatedQuestions], 200);
         } catch (Exception $e) {
-            return response()->json(['error' => 'Failed to update questions', 'details' => $e->getMessage()], 500);
+            return response()->json(['error' => 'Failed to bulk update questions', 'details' => $e->getMessage()], 500);
         }
     }
 
-    /**
-     * Bulk delete questions for a run
-     */
-    public function bulkDeleteQuestions(Request $request, $run_id)
+    public function bulkDeleteQuestions(Request $request, $runId)
     {
         try {
-            $user = Auth::user();
-            $run = Run::findOrFail($run_id);
-
-            if ($run->user_id !== $user->user_id) {
+            $run = Run::findOrFail($runId);
+            if ($run->user_id !== Auth::id()) {
                 return response()->json(['error' => 'Unauthorized'], 403);
             }
 
-            $validator = Validator::make($request->all(), [
-                'question_ids' => 'required|array|min:1',
-                'question_ids.*' => 'exists:questions,question_id',
-            ]);
+            $questionIds = $request->input('question_ids', []);
+            $deletedCount = Question::where('run_id', $runId)->whereIn('question_id', $questionIds)->delete();
 
-            if ($validator->fails()) {
-                return response()->json(['errors' => $validator->errors()], 422);
-            }
-
-            $deleted = $run->questions()->whereIn('question_id', $request->question_ids)->delete();
-
-            return response()->json([
-                'message' => "$deleted questions deleted successfully"
-            ], 200);
-
-        } catch (ModelNotFoundException $e) {
-            return response()->json(['error' => 'Run not found'], 404);
+            return response()->json(['message' => "Deleted $deletedCount questions"], 200);
         } catch (Exception $e) {
-            return response()->json(['error' => 'Failed to delete questions', 'details' => $e->getMessage()], 500);
+            return response()->json(['error' => 'Failed to bulk delete questions', 'details' => $e->getMessage()], 500);
         }
     }
 }

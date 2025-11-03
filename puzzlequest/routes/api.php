@@ -62,7 +62,17 @@ Route::get('run-types', [RunTypeController::class, 'index']);
 Route::get('run-types/{id}', [RunTypeController::class, 'show']);
 
 /*** CRUD Routes for Questions ***/
-Route::apiResource('questions', QuestionController::class);
+Route::prefix('questions')->group(function () {
+    Route::get('', [QuestionController::class, 'index']);
+    Route::get('{question_id}', [QuestionController::class, 'show']);
+    Route::post('', [QuestionController::class, 'store']);
+    Route::put('{question_id}', [QuestionController::class, 'update']);
+    Route::delete('{question_id}', [QuestionController::class, 'destroy']);
+
+    // Bulk endpoints
+    Route::post('bulk', [QuestionController::class, 'bulkStore']);
+    Route::delete('bulk', [QuestionController::class, 'bulkDelete']);
+});
 
 /*** CRUD Routes for Question Options ***/
 Route::prefix('questions/{question_id}')->group(function () {

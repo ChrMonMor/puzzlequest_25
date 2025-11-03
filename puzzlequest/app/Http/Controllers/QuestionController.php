@@ -3,52 +3,55 @@
 namespace App\Http\Controllers;
 
 use App\Models\Question;
+use App\Models\QuestionOption;
 use App\Models\Run;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Validator;
-use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Support\Facades\Auth;
 use Exception;
 
 class QuestionController extends Controller
 {
     public function __construct()
     {
-        // Block session-only guests from mutating actions
+        $this->middleware('auth:api')->except(['index','show']);
         $this->middleware(\App\Http\Middleware\BlockGuestMiddleware::class)->only(['store', 'update', 'destroy']);
     }
-    /**
-     * List all questions (public)
-     */
+    // List all questions (with options, type, run, flag)
     public function index()
     {
-        $questions = Question::with(['run', 'flag', 'questionType', 'options'])->get();
-        return response()->json($questions, 200);
-    }
-
-    /**
-     * Show a single question (public)
-     */
-    public function show($question_id)
-    {
         try {
-            $question = Question::with(['run', 'flag', 'questionType', 'options'])->findOrFail($question_id);
-            return response()->json($question, 200);
-        } catch (ModelNotFoundException $e) {
-            return response()->json(['error' => 'Question not found'], 404);
+            $questions = Question::with(['options', 'questionType', 'flag', 'run'])->get();
+            return response()->json($questions, 200);
+        } catch (Exception $e) {
+            return response()->json(['error' => 'Failed to fetch questions', 'details' => $e->getMessage()], 500);
         }
     }
 
-    /**
-     * Create a new question (authenticated, run owner)
-     */
+    // Show single question
+    public function show($id)
+    {
+        try {
+            $question = Question::with(['options', 'questionType', 'flag', 'run'])->findOrFail($id);
+            return response()->json($question, 200);
+        } catch (Exception $e) {
+            return response()->json(['error' => 'Question not found', 'details' => $e->getMessage()], 404);
+        }
+    }
+
+    // Create a question (linked to a run)
     public function store(Request $request)
     {
         try {
-            $user = Auth::user();
+            $userId = Auth::id();
+            $runId = $request->input('run_id');
+
+            $run = Run::findOrFail($runId);
+            if ($run->user_id !== $userId) {
+                return response()->json(['error' => 'Unauthorized'], 403);
+            }
 
             $validator = Validator::make($request->all(), [
-                'run_id' => 'required|exists:runs,run_id',
                 'flag_id' => 'nullable|exists:flags,flag_id',
                 'question_type' => 'required|exists:question_types,question_type_id',
                 'question_text' => 'required|string',
@@ -59,42 +62,21 @@ class QuestionController extends Controller
                 return response()->json(['errors' => $validator->errors()], 422);
             }
 
-            $run = Run::findOrFail($request->run_id);
+            $question = Question::create($request->only(['run_id', 'flag_id', 'question_type', 'question_text', 'question_answer']));
+            $question->load(['options', 'questionType', 'flag', 'run']);
 
-            if ($run->user_id !== $user->user_id) {
-                return response()->json(['error' => 'Unauthorized'], 403);
-            }
-
-            $question = Question::create($request->only([
-                'run_id', 'flag_id', 'question_type', 'question_text', 'question_answer'
-            ]));
-
-            $question->load(['run', 'flag', 'questionType', 'options']);
-
-            return response()->json([
-                'message' => 'Question created successfully',
-                'question' => $question
-            ], 201);
-
-        } catch (ModelNotFoundException $e) {
-            return response()->json(['error' => 'Run not found'], 404);
+            return response()->json(['message' => 'Question created', 'question' => $question], 201);
         } catch (Exception $e) {
             return response()->json(['error' => 'Failed to create question', 'details' => $e->getMessage()], 500);
         }
     }
 
-    /**
-     * Update a question (authenticated, run owner)
-     */
-    public function update(Request $request, $question_id)
+    // Update question (only owner of run)
+    public function update(Request $request, $id)
     {
         try {
-            $user = Auth::user();
-            $question = Question::findOrFail($question_id);
-
-            $run = Run::findOrFail($question->run_id);
-
-            if ($run->user_id !== $user->user_id) {
+            $question = Question::findOrFail($id);
+            if ($question->run->user_id !== Auth::id()) {
                 return response()->json(['error' => 'Unauthorized'], 403);
             }
 
@@ -109,47 +91,101 @@ class QuestionController extends Controller
                 return response()->json(['errors' => $validator->errors()], 422);
             }
 
-            $question->update($request->only([
-                'flag_id', 'question_type', 'question_text', 'question_answer'
-            ]));
+            $question->update($request->only(['flag_id', 'question_type', 'question_text', 'question_answer']));
+            $question->load(['options', 'questionType', 'flag', 'run']);
 
-            $question->load(['run', 'flag', 'questionType', 'options']);
-
-            return response()->json([
-                'message' => 'Question updated successfully',
-                'question' => $question
-            ], 200);
-
-        } catch (ModelNotFoundException $e) {
-            return response()->json(['error' => 'Question not found'], 404);
+            return response()->json(['message' => 'Question updated', 'question' => $question], 200);
         } catch (Exception $e) {
             return response()->json(['error' => 'Failed to update question', 'details' => $e->getMessage()], 500);
         }
     }
 
-    /**
-     * Delete a question (authenticated, run owner)
-     */
-    public function destroy($question_id)
+    // Delete question (only owner)
+    public function destroy($id)
     {
         try {
-            $user = Auth::user();
-            $question = Question::findOrFail($question_id);
-
-            $run = Run::findOrFail($question->run_id);
-
-            if ($run->user_id !== $user->user_id) {
+            $question = Question::findOrFail($id);
+            if ($question->run->user_id !== Auth::id()) {
                 return response()->json(['error' => 'Unauthorized'], 403);
             }
 
             $question->delete();
-
-            return response()->json(['message' => 'Question deleted successfully'], 200);
-
-        } catch (ModelNotFoundException $e) {
-            return response()->json(['error' => 'Question not found'], 404);
+            return response()->json(['message' => 'Question deleted'], 200);
         } catch (Exception $e) {
             return response()->json(['error' => 'Failed to delete question', 'details' => $e->getMessage()], 500);
+        }
+    }
+
+    // ---------------- Bulk Operations ----------------
+
+    public function bulkCreate(Request $request, $runId)
+    {
+        try {
+            $run = Run::findOrFail($runId);
+            if ($run->user_id !== Auth::id()) {
+                return response()->json(['error' => 'Unauthorized'], 403);
+            }
+
+            $questionsData = $request->input('questions', []);
+            $createdQuestions = [];
+
+            foreach ($questionsData as $qData) {
+                $validator = Validator::make($qData, [
+                    'flag_id' => 'nullable|exists:flags,flag_id',
+                    'question_type' => 'required|exists:question_types,question_type_id',
+                    'question_text' => 'required|string',
+                    'question_answer' => 'nullable|string',
+                ]);
+                if ($validator->fails()) continue;
+
+                $createdQuestions[] = Question::create(array_merge($qData, ['run_id' => $runId]));
+            }
+
+            return response()->json(['message' => 'Questions created', 'questions' => $createdQuestions], 201);
+        } catch (Exception $e) {
+            return response()->json(['error' => 'Failed to bulk create questions', 'details' => $e->getMessage()], 500);
+        }
+    }
+
+    public function bulkUpdate(Request $request, $runId)
+    {
+        try {
+            $run = Run::findOrFail($runId);
+            if ($run->user_id !== Auth::id()) {
+                return response()->json(['error' => 'Unauthorized'], 403);
+            }
+
+            $questionsData = $request->input('questions', []);
+            $updatedQuestions = [];
+
+            foreach ($questionsData as $qData) {
+                $question = Question::find($qData['question_id'] ?? null);
+                if (!$question || $question->run_id !== $runId) continue;
+
+                $question->update($qData);
+                $updatedQuestions[] = $question;
+            }
+
+            return response()->json(['message' => 'Questions updated', 'questions' => $updatedQuestions], 200);
+        } catch (Exception $e) {
+            return response()->json(['error' => 'Failed to bulk update questions', 'details' => $e->getMessage()], 500);
+        }
+    }
+
+    public function bulkDelete(Request $request, $runId)
+    {
+        try {
+            $run = Run::findOrFail($runId);
+            if ($run->user_id !== Auth::id()) {
+                return response()->json(['error' => 'Unauthorized'], 403);
+            }
+
+            $questionIds = $request->input('question_ids', []);
+            $deletedCount = Question::where('run_id', $runId)->whereIn('question_id', $questionIds)->delete();
+
+            return response()->json(['message' => "Deleted $deletedCount questions"], 200);
+        } catch (Exception $e) {
+            return response()->json(['error' => 'Failed to bulk delete questions', 'details' => $e->getMessage()], 500);
         }
     }
 }
