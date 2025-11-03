@@ -64,6 +64,19 @@ Route::get('run-types/{id}', [RunTypeController::class, 'show']);
 /*** CRUD Routes for Questions ***/
 Route::apiResource('questions', QuestionController::class);
 
+/*** CRUD Routes for Question Options ***/
+Route::prefix('questions/{question_id}')->group(function () {
+    Route::get('options', [QuestionOptionController::class, 'index']);
+    Route::post('options', [QuestionOptionController::class, 'store']);
+    Route::post('options/bulk', [QuestionOptionController::class, 'bulkCreate']);
+    Route::delete('options/bulk', [QuestionOptionController::class, 'bulkDelete']);
+});
+
+Route::prefix('options/{option_id}')->group(function () {
+    Route::get('', [QuestionOptionController::class, 'show']);
+    Route::put('', [QuestionOptionController::class, 'update']);
+    Route::delete('', [QuestionOptionController::class, 'destroy']);
+});
 
 /*** CRUD Routes for Flags ***/
 Route::apiResource('flags', FlagController::class);
