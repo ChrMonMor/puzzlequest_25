@@ -62,6 +62,8 @@ Route::get('run-types', [RunTypeController::class, 'index']);
 Route::get('run-types/{id}', [RunTypeController::class, 'show']);
 
 /*** CRUD Routes for Questions ***/
+Route::apiResource('questions', QuestionController::class);
+
 
 /*** CRUD Routes for Flags ***/
 Route::apiResource('flags', FlagController::class);
