@@ -5,9 +5,12 @@ namespace Tests\Feature;
 use Tests\ApiTestCase;
 use App\Models\Run;
 use App\Models\Flag;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 
 class FlagApiTest extends ApiTestCase
 {
+    use RefreshDatabase;
+
     /** @test */
     public function user_can_bulk_create_flags()
     {
@@ -19,7 +22,7 @@ class FlagApiTest extends ApiTestCase
             ['flag_number' => 2, 'flag_lat' => 23.45, 'flag_long' => 67.89],
         ];
 
-        $response = $this->withToken()->postJson("/api/runs/{$run->run_id}/bulk-flags", $payload);
+        $response = $this->withToken()->postJson("/api/runs/{$run->run_id}/flags/bulk", $payload);
 
         $response->assertStatus(201)
                  ->assertJsonCount(2);
@@ -42,7 +45,7 @@ class FlagApiTest extends ApiTestCase
             ];
         })->toArray();
 
-        $response = $this->withToken()->putJson("/api/runs/{$run->run_id}/bulk-flags", $payload);
+        $response = $this->withToken()->putJson("/api/runs/{$run->run_id}/flags/bulk", $payload);
 
         $response->assertStatus(200);
     }
@@ -56,7 +59,7 @@ class FlagApiTest extends ApiTestCase
 
         $ids = $flags->pluck('flag_id')->toArray();
 
-        $response = $this->withToken()->deleteJson("/api/runs/{$run->run_id}/bulk-flags", ['ids' => $ids]);
+        $response = $this->withToken()->deleteJson("/api/runs/{$run->run_id}/flags/bulk", ['ids' => $ids]);
 
         $response->assertStatus(200);
 

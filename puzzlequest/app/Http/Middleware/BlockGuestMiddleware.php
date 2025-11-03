@@ -13,8 +13,13 @@ class BlockGuestMiddleware
      */
     public function handle(Request $request, Closure $next)
     {
-        if ($request->session()->has('guest')) {
-            // Redirect guests to upgrade page with a notice
+        // If there's no session (API token requests in tests), allow the request
+        if ($request->hasSession() && $request->session()->has('guest')) {
+            // For API requests return JSON 403, for web redirect to upgrade
+            if ($request->expectsJson() || $request->is('api/*')) {
+                return response()->json(['error' => 'Guests cannot perform that action. Please upgrade to continue.'], 403);
+            }
+
             return redirect()->route('upgrade')->with('info', 'Guests cannot perform that action. Please upgrade to continue.');
         }
 

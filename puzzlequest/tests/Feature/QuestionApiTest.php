@@ -7,9 +7,13 @@ use App\Models\Run;
 use App\Models\Flag;
 use App\Models\Question;
 use App\Models\QuestionOption;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 
 class QuestionApiTest extends ApiTestCase
 {
+    
+    use RefreshDatabase;
+    
     /** @test */
     public function user_can_create_question_with_options()
     {

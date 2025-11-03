@@ -36,6 +36,7 @@ class Run extends Model
             if (empty($model->{$model->getKeyName()})) {
                 $model->{$model->getKeyName()} = (string) Str::uuid();
             }
+            $model->run_added = now();
         });
     }
 

@@ -98,54 +98,90 @@ class FlagController extends Controller
         }
     }
 
-    // Bulk create
-    public function bulkStore(Request $request)
+    // Bulk create for flags under a run (matches routes: POST /runs/{runId}/flags/bulk)
+    public function bulkCreate(Request $request, $runId)
     {
         try {
-            $flagsData = $request->input('flags');
+            $run = Run::findOrFail($runId);
+            if ($request->user()->user_id !== $run->user_id) return response()->json(['error'=>'Unauthorized'], 403);
+            // Accept either a top-level array payload or a 'flags' key
+            $flagsData = $request->input('flags', $request->all());
+
+            // Normalize single-object payload into an array
             if (!is_array($flagsData)) return response()->json(['error'=>'flags must be an array'],422);
+            if (array_keys($flagsData) !== range(0, count($flagsData) - 1)) {
+                // associative -> single object
+                $flagsData = [$flagsData];
+            }
 
             $created = [];
-            foreach($flagsData as $data){
+            foreach ($flagsData as $data) {
                 $validator = Validator::make($data, [
-                    'run_id'=>'required|exists:runs,run_id',
-                    'flag_number'=>'required|integer',
-                    'flag_lat'=>'required|numeric',
-                    'flag_long'=>'required|numeric',
+                    'flag_number' => 'required|integer',
+                    'flag_lat' => 'required|numeric',
+                    'flag_long' => 'required|numeric',
                 ]);
                 if ($validator->fails()) continue;
 
-                $run = Run::findOrFail($data['run_id']);
-                if ($request->user()->user_id !== $run->user_id) continue;
+                // enforce run id from the URL
+                $data['run_id'] = $runId;
 
                 $flag = Flag::create($data);
-                $flag->load('run','questions');
+                $flag->load('run', 'questions');
                 $created[] = $flag;
             }
 
-            return response()->json(['message'=>'Bulk flags created','flags'=>$created],201);
+            // Return the created flags as a top-level JSON array (tests expect an array)
+            return response()->json($created, 201);
         } catch (Exception $e) {
             return response()->json(['error'=>'Failed bulk create','details'=>$e->getMessage()],500);
         }
     }
 
-    // Bulk delete
-    public function bulkDelete(Request $request)
+    // Bulk update for flags under a run (matches routes: PUT /runs/{runId}/flags/bulk)
+    public function bulkUpdate(Request $request, $runId)
     {
         try {
-            $flagIds = $request->input('flag_ids');
-            if (!is_array($flagIds)) return response()->json(['error'=>'flag_ids must be an array'],422);
-
-            $deleted = 0;
-            foreach($flagIds as $id){
-                $flag = Flag::with('run')->find($id);
-                if (!$flag) continue;
-                if ($request->user()->user_id !== $flag->run->user_id) continue;
-                $flag->delete();
-                $deleted++;
+            $run = Run::findOrFail($runId);
+            if ($request->user()->user_id !== $run->user_id) return response()->json(['error'=>'Unauthorized'], 403);
+            // Accept either a top-level array payload or a 'flags' key
+            $flagsData = $request->input('flags', $request->all());
+            if (!is_array($flagsData)) return response()->json(['error'=>'flags must be an array'],422);
+            if (array_keys($flagsData) !== range(0, count($flagsData) - 1)) {
+                $flagsData = [$flagsData];
             }
 
-            return response()->json(['message'=>"$deleted flags deleted"],200);
+            $updated = [];
+            foreach ($flagsData as $data) {
+                $flag = Flag::find($data['flag_id'] ?? null);
+                if (!$flag || $flag->run_id != $runId) continue;
+
+                // Only allow updatable fields
+                $flag->update(array_intersect_key($data, array_flip(['flag_number','flag_lat','flag_long'])));
+                $flag->load('run', 'questions');
+                $updated[] = $flag;
+            }
+
+            return response()->json(['message' => 'Flags updated', 'flags' => $updated], 200);
+        } catch (Exception $e) {
+            return response()->json(['error'=>'Failed bulk update','details'=>$e->getMessage()],500);
+        }
+    }
+
+    // Bulk delete for flags under a run (matches routes: DELETE /runs/{runId}/flags/bulk)
+    public function bulkDelete(Request $request, $runId)
+    {
+        try {
+            $run = Run::findOrFail($runId);
+            if ($request->user()->user_id !== $run->user_id) return response()->json(['error'=>'Unauthorized'], 403);
+            // Accept 'flag_ids' or 'ids' or a raw array body
+            $flagIds = $request->input('flag_ids', $request->input('ids', $request->all()));
+            if (!is_array($flagIds)) return response()->json(['error'=>'flag_ids must be an array'],422);
+
+            $deleted = Flag::where('run_id', $runId)->whereIn('flag_id', $flagIds)->delete();
+
+            // Return consistent message expected by tests
+            return response()->json(['message' => 'Flags deleted'], 200);
         } catch (Exception $e) {
             return response()->json(['error'=>'Failed bulk delete','details'=>$e->getMessage()],500);
         }

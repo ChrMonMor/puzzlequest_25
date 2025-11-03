@@ -72,10 +72,10 @@ class QuestionController extends Controller
     }
 
     // Update question (only owner of run)
-    public function update(Request $request, $id)
+    public function update(Request $request)
     {
         try {
-            $question = Question::findOrFail($id);
+            $question = Question::findOrFail($request->id);
             if ($question->run->user_id !== Auth::id()) {
                 return response()->json(['error' => 'Unauthorized'], 403);
             }

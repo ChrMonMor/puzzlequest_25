@@ -5,9 +5,13 @@ namespace Tests\Feature;
 use Tests\ApiTestCase;
 use App\Models\RunType;
 use App\Models\QuestionType;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 
 class EnumApiTest extends ApiTestCase
 {
+    
+    use RefreshDatabase;
+
     /** @test */
     public function user_can_fetch_run_types()
     {
