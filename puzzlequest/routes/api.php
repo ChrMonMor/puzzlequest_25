@@ -26,7 +26,7 @@ Route::get('/ping', function () {
     return response()->json(['message' => 'pong'], 200);
 });
 
-/*** User Routes ***/
+// -------------------- USER ROUTES --------------------
 Route::get('/user', function (Request $request) {
     return $request->user();
 })->middleware('auth:sanctum');
@@ -48,45 +48,89 @@ Route::middleware(['auth.api', 'refresh.token'])->post('/user', [AuthController:
 Route::post('/forgot-password', [AuthController::class, 'forgotPassword']);
 Route::post('/reset-password', [AuthController::class, 'resetPassword']);
 
-/*** CRUD Routes for Runs ***/
-Route::apiResource('runs', RunController::class);
 
-Route::group(['middleware' => 'auth:api'], function () {
-    Route::post('runs/{run_id}/flags/bulk', [RunController::class, 'addFlagsBulk']);
-    Route::put('runs/{run_id}/flags/bulk', [RunController::class, 'updateFlagsBulk']);
-    Route::delete('runs/{run_id}/flags/bulk', [RunController::class, 'deleteFlagsBulk']);
+// -------------------- RUN ROUTES --------------------
+Route::prefix('runs')->group(function () {
+    Route::get('/', [RunController::class, 'index']);          // Public: list all runs
+    Route::get('{id}', [RunController::class, 'show']);       // Public: show single run
+
+    Route::middleware('auth:api')->group(function () {
+        Route::post('/', [RunController::class, 'store']);    // Create run
+        Route::put('{id}', [RunController::class, 'update']); // Update run
+        Route::delete('{id}', [RunController::class, 'destroy']); // Delete run
+
+        // Bulk operations for flags and questions linked to runs
+        Route::post('{runId}/flags/bulk', [FlagController::class, 'bulkCreate']);
+        Route::put('{runId}/flags/bulk', [FlagController::class, 'bulkUpdate']);
+        Route::delete('{runId}/flags/bulk', [FlagController::class, 'bulkDelete']);
+
+        Route::post('{runId}/questions/bulk', [QuestionController::class, 'bulkCreate']);
+        Route::put('{runId}/questions/bulk', [QuestionController::class, 'bulkUpdate']);
+        Route::delete('{runId}/questions/bulk', [QuestionController::class, 'bulkDelete']);
+    });
 });
 
-/*** RunTypes Routes ***/
-Route::get('run-types', [RunTypeController::class, 'index']);
-Route::get('run-types/{id}', [RunTypeController::class, 'show']);
+// -------------------- FLAG ROUTES --------------------
+Route::prefix('flags')->group(function () {
+    Route::get('/', [FlagController::class, 'index']);        // Public
+    Route::get('{id}', [FlagController::class, 'show']);     // Public
 
-/*** CRUD Routes for Questions ***/
+    Route::middleware('auth:api')->group(function () {
+        Route::post('/', [FlagController::class, 'store']);
+        Route::put('{id}', [FlagController::class, 'update']);
+        Route::delete('{id}', [FlagController::class, 'destroy']);
+    });
+});
+
+// -------------------- RUN TYPE ROUTES --------------------
+Route::prefix('run-types')->group(function () {
+    Route::get('/', [RunTypeController::class, 'index']);    // Public
+    Route::get('{id}', [RunTypeController::class, 'show']); // Public
+
+    Route::middleware('auth:api')->group(function () {
+        Route::post('/', [RunTypeController::class, 'store']);
+        Route::put('{id}', [RunTypeController::class, 'update']);
+        Route::delete('{id}', [RunTypeController::class, 'destroy']);
+    });
+});
+
+// -------------------- QUESTION ROUTES --------------------
 Route::prefix('questions')->group(function () {
-    Route::get('', [QuestionController::class, 'index']);
-    Route::get('{question_id}', [QuestionController::class, 'show']);
-    Route::post('', [QuestionController::class, 'store']);
-    Route::put('{question_id}', [QuestionController::class, 'update']);
-    Route::delete('{question_id}', [QuestionController::class, 'destroy']);
+    Route::get('/', [QuestionController::class, 'index']);        // Public
+    Route::get('{id}', [QuestionController::class, 'show']);     // Public
 
-    // Bulk endpoints
-    Route::post('bulk', [QuestionController::class, 'bulkStore']);
-    Route::delete('bulk', [QuestionController::class, 'bulkDelete']);
+    Route::middleware('auth:api')->group(function () {
+        Route::post('/', [QuestionController::class, 'store']);
+        Route::put('{id}', [QuestionController::class, 'update']);
+        Route::delete('{id}', [QuestionController::class, 'destroy']);
+    });
 });
 
-/*** CRUD Routes for Question Options ***/
-Route::prefix('questions/{question_id}')->group(function () {
-    Route::get('options', [QuestionOptionController::class, 'index']);
-    Route::post('options', [QuestionOptionController::class, 'store']);
-    Route::post('options/bulk', [QuestionOptionController::class, 'bulkCreate']);
-    Route::delete('options/bulk', [QuestionOptionController::class, 'bulkDelete']);
+// -------------------- QUESTION OPTION ROUTES --------------------
+Route::prefix('question-options')->group(function () {
+    Route::get('/', [QuestionOptionController::class, 'index']);       // Public
+    Route::get('{id}', [QuestionOptionController::class, 'show']);     // Public
+
+    Route::middleware('auth:api')->group(function () {
+        Route::post('/', [QuestionOptionController::class, 'store']);
+        Route::put('{id}', [QuestionOptionController::class, 'update']);
+        Route::delete('{id}', [QuestionOptionController::class, 'destroy']);
+
+        // Bulk options for a question
+        Route::post('{questionId}/bulk', [QuestionOptionController::class, 'bulkCreate']);
+        Route::put('{questionId}/bulk', [QuestionOptionController::class, 'bulkUpdate']);
+        Route::delete('{questionId}/bulk', [QuestionOptionController::class, 'bulkDelete']);
+    });
 });
 
-Route::prefix('options/{option_id}')->group(function () {
-    Route::get('', [QuestionOptionController::class, 'show']);
-    Route::put('', [QuestionOptionController::class, 'update']);
-    Route::delete('', [QuestionOptionController::class, 'destroy']);
-});
+// -------------------- QUESTION TYPE ROUTES --------------------
+Route::prefix('question-types')->group(function () {
+    Route::get('/', [QuestionTypeController::class, 'index']);      // Public
+    Route::get('{id}', [QuestionTypeController::class, 'show']);   // Public
 
-/*** CRUD Routes for Flags ***/
-Route::apiResource('flags', FlagController::class);
+    Route::middleware('auth:api')->group(function () {
+        Route::post('/', [QuestionTypeController::class, 'store']);
+        Route::put('{id}', [QuestionTypeController::class, 'update']);
+        Route::delete('{id}', [QuestionTypeController::class, 'destroy']);
+    });
+});
