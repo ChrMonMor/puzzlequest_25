@@ -27,16 +27,13 @@ class BlockGuestMiddleware
                 $hasGuest = $request->session()->has('guest');
             }
         } catch (\RuntimeException $e) {
-            // No session store available on the request — continue as non-guest.
             $hasGuest = false;
         }
-
+        
         if ($hasGuest) {
-            // For API requests return JSON 403, for web redirect to upgrade
             if ($request->expectsJson() || $request->is('api/*')) {
                 return response()->json(['error' => 'Guests cannot perform that action. Please upgrade to continue.'], 403);
             }
-
             return redirect()->route('upgrade')->with('info', 'Guests cannot perform that action. Please upgrade to continue.');
         }
 

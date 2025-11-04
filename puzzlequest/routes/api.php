@@ -64,7 +64,7 @@ Route::prefix('runs')->group(function () {
         Route::put('{runId}/flags/bulk', [FlagController::class, 'bulkUpdate']);
         Route::delete('{runId}/flags/bulk', [FlagController::class, 'bulkDelete']);
 
-    Route::post('{runId}/questions/bulk', [QuestionController::class, 'bulkCreate']);
+        Route::post('{runId}/questions/bulk', [QuestionController::class, 'bulkCreate']);
         Route::put('{runId}/questions/bulk', [QuestionController::class, 'bulkUpdate']);
         Route::delete('{runId}/questions/bulk', [QuestionController::class, 'bulkDelete']);
     });
@@ -117,7 +117,7 @@ Route::prefix('question-options')->group(function () {
         Route::delete('{id}', [QuestionOptionController::class, 'destroy']);
 
         // Bulk options for a question
-    Route::post('{questionId}/bulk', [QuestionOptionController::class, 'bulkCreate']);
+        Route::post('{questionId}/bulk', [QuestionOptionController::class, 'bulkCreate']);
         Route::put('{questionId}/bulk', [QuestionOptionController::class, 'bulkUpdate']);
         Route::delete('{questionId}/bulk', [QuestionOptionController::class, 'bulkDelete']);
     });
