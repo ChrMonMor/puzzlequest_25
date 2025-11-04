@@ -55,15 +55,10 @@ class RunController extends Controller
     public function store(Request $request)
     {
         try {
-            // Prefer the authenticated user from the request so the API (JWT) guard is used.
-            $user = $request->user();
-            if (! $user) {
-                return response()->json(['error' => 'Unauthorized'], 401);
-            }
+            $user = auth('api')->user();
             $userId = $user->user_id;
 
             $validator = Validator::make($request->all(), [
-                // Allow numeric run_type in tests (run_types table may not be seeded in test environment)
                 'run_type' => 'required|integer',
                 'run_title' => 'required|string|max:255',
                 'run_description' => 'nullable|string',
@@ -105,7 +100,12 @@ class RunController extends Controller
         try {
             $run = Run::findOrFail($id);
 
-            if ($run->user_id !== Auth::id()) {
+            $user = auth('api')->user();
+            if (!$user) {
+                return response()->json(['error' => 'Unauthorized. Please log in.'], 401);
+            }
+
+            if ($run->user_id !== $user->user_id) {
                 return response()->json(['error' => 'Unauthorized'], 403);
             }
 
@@ -150,7 +150,12 @@ class RunController extends Controller
         try {
             $run = Run::findOrFail($id);
 
-            if ($run->user_id !== Auth::id()) {
+            $user = auth('api')->user();
+            if (!$user) {
+                return response()->json(['error' => 'Unauthorized. Please log in.'], 401);
+            }
+
+            if ($run->user_id !== $user->user_id) {
                 return response()->json(['error' => 'Unauthorized'], 403);
             }
 
@@ -168,7 +173,9 @@ class RunController extends Controller
     {
         try {
             $run = Run::findOrFail($runId);
-            if ($run->user_id !== Auth::id()) {
+            $user = auth('api')->user();
+            if (!$user) return response()->json(['error' => 'Unauthorized. Please log in.'], 401);
+            if ($run->user_id !== $user->user_id) {
                 return response()->json(['error' => 'Unauthorized'], 403);
             }
 
@@ -196,7 +203,9 @@ class RunController extends Controller
     {
         try {
             $run = Run::findOrFail($runId);
-            if ($run->user_id !== Auth::id()) {
+            $user = auth('api')->user();
+            if (!$user) return response()->json(['error' => 'Unauthorized. Please log in.'], 401);
+            if ($run->user_id !== $user->user_id) {
                 return response()->json(['error' => 'Unauthorized'], 403);
             }
 
@@ -221,7 +230,9 @@ class RunController extends Controller
     {
         try {
             $run = Run::findOrFail($runId);
-            if ($run->user_id !== Auth::id()) {
+            $user = auth('api')->user();
+            if (!$user) return response()->json(['error' => 'Unauthorized. Please log in.'], 401);
+            if ($run->user_id !== $user->user_id) {
                 return response()->json(['error' => 'Unauthorized'], 403);
             }
 
@@ -241,7 +252,9 @@ class RunController extends Controller
     {
         try {
             $run = Run::findOrFail($runId);
-            if ($run->user_id !== Auth::id()) {
+            $user = auth('api')->user();
+            if (!$user) return response()->json(['error' => 'Unauthorized. Please log in.'], 401);
+            if ($run->user_id !== $user->user_id) {
                 return response()->json(['error' => 'Unauthorized'], 403);
             }
 
@@ -270,7 +283,9 @@ class RunController extends Controller
     {
         try {
             $run = Run::findOrFail($runId);
-            if ($run->user_id !== Auth::id()) {
+            $user = auth('api')->user();
+            if (!$user) return response()->json(['error' => 'Unauthorized. Please log in.'], 401);
+            if ($run->user_id !== $user->user_id) {
                 return response()->json(['error' => 'Unauthorized'], 403);
             }
 
@@ -295,7 +310,9 @@ class RunController extends Controller
     {
         try {
             $run = Run::findOrFail($runId);
-            if ($run->user_id !== Auth::id()) {
+            $user = auth('api')->user();
+            if (!$user) return response()->json(['error' => 'Unauthorized. Please log in.'], 401);
+            if ($run->user_id !== $user->user_id) {
                 return response()->json(['error' => 'Unauthorized'], 403);
             }
 

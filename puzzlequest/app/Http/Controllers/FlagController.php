@@ -53,7 +53,9 @@ class FlagController extends Controller
             if ($validator->fails()) return response()->json(['errors'=>$validator->errors()],422);
 
             $run = Run::findOrFail($request->run_id);
-            if ($request->user()->user_id !== $run->user_id) return response()->json(['error'=>'Unauthorized'], 403);
+            $user = auth('api')->user();
+            if (!$user) return response()->json(['error'=>'Unauthorized. Please log in.'], 401);
+            if ($user->user_id !== $run->user_id) return response()->json(['error'=>'Unauthorized'], 403);
 
             $flag = Flag::create($request->only(['run_id','flag_number','flag_lat','flag_long']));
             $flag->load('run','questions');
@@ -68,7 +70,9 @@ class FlagController extends Controller
     {
         try {
             $flag = Flag::with('run')->findOrFail($flag_id);
-            if ($request->user()->user_id !== $flag->run->user_id) return response()->json(['error'=>'Unauthorized'], 403);
+            $user = auth('api')->user();
+            if (!$user) return response()->json(['error'=>'Unauthorized. Please log in.'], 401);
+            if ($user->user_id !== $flag->run->user_id) return response()->json(['error'=>'Unauthorized'], 403);
 
             $validator = Validator::make($request->all(), [
                 'flag_number'=>'nullable|integer',
@@ -90,7 +94,9 @@ class FlagController extends Controller
     {
         try {
             $flag = Flag::with('run')->findOrFail($flag_id);
-            if ($request->user()->user_id !== $flag->run->user_id) return response()->json(['error'=>'Unauthorized'], 403);
+            $user = auth('api')->user();
+            if (!$user) return response()->json(['error'=>'Unauthorized. Please log in.'], 401);
+            if ($user->user_id !== $flag->run->user_id) return response()->json(['error'=>'Unauthorized'], 403);
             $flag->delete();
             return response()->json(['message'=>'Flag deleted'],200);
         } catch (Exception $e) {
@@ -103,7 +109,9 @@ class FlagController extends Controller
     {
         try {
             $run = Run::findOrFail($runId);
-            if ($request->user()->user_id !== $run->user_id) return response()->json(['error'=>'Unauthorized'], 403);
+            $user = auth('api')->user();
+            if (!$user) return response()->json(['error'=>'Unauthorized. Please log in.'], 401);
+            if ($user->user_id !== $run->user_id) return response()->json(['error'=>'Unauthorized'], 403);
             // Accept either a top-level array payload or a 'flags' key
             $flagsData = $request->input('flags', $request->all());
 
@@ -143,7 +151,9 @@ class FlagController extends Controller
     {
         try {
             $run = Run::findOrFail($runId);
-            if ($request->user()->user_id !== $run->user_id) return response()->json(['error'=>'Unauthorized'], 403);
+            $user = auth('api')->user();
+            if (!$user) return response()->json(['error'=>'Unauthorized. Please log in.'], 401);
+            if ($user->user_id !== $run->user_id) return response()->json(['error'=>'Unauthorized'], 403);
             // Accept either a top-level array payload or a 'flags' key
             $flagsData = $request->input('flags', $request->all());
             if (!is_array($flagsData)) return response()->json(['error'=>'flags must be an array'],422);
@@ -173,7 +183,9 @@ class FlagController extends Controller
     {
         try {
             $run = Run::findOrFail($runId);
-            if ($request->user()->user_id !== $run->user_id) return response()->json(['error'=>'Unauthorized'], 403);
+            $user = auth('api')->user();
+            if (!$user) return response()->json(['error'=>'Unauthorized. Please log in.'], 401);
+            if ($user->user_id !== $run->user_id) return response()->json(['error'=>'Unauthorized'], 403);
             // Accept 'flag_ids' or 'ids' or a raw array body
             $flagIds = $request->input('flag_ids', $request->input('ids', $request->all()));
             if (!is_array($flagIds)) return response()->json(['error'=>'flag_ids must be an array'],422);

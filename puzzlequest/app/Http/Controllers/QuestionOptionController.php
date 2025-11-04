@@ -43,7 +43,9 @@ class QuestionOptionController extends Controller
     {
         try {
             $question = Question::findOrFail($request->input('question_id'));
-            if ($question->run->user_id !== Auth::id()) {
+            $user = auth('api')->user();
+            if (!$user) return response()->json(['error' => 'Unauthorized. Please log in.'], 401);
+            if ($question->run->user_id !== $user->user_id) {
                 return response()->json(['error' => 'Unauthorized'], 403);
             }
 
@@ -70,7 +72,9 @@ class QuestionOptionController extends Controller
     {
         try {
             $option = QuestionOption::findOrFail($id);
-            if ($option->question->run->user_id !== Auth::id()) {
+            $user = auth('api')->user();
+            if (!$user) return response()->json(['error' => 'Unauthorized. Please log in.'], 401);
+            if ($option->question->run->user_id !== $user->user_id) {
                 return response()->json(['error' => 'Unauthorized'], 403);
             }
 
@@ -96,7 +100,9 @@ class QuestionOptionController extends Controller
     {
         try {
             $option = QuestionOption::findOrFail($id);
-            if ($option->question->run->user_id !== Auth::id()) {
+            $user = auth('api')->user();
+            if (!$user) return response()->json(['error' => 'Unauthorized. Please log in.'], 401);
+            if ($option->question->run->user_id !== $user->user_id) {
                 return response()->json(['error' => 'Unauthorized'], 403);
             }
 
@@ -113,7 +119,9 @@ class QuestionOptionController extends Controller
     {
         try {
             $question = Question::findOrFail($questionId);
-            if ($question->run->user_id !== Auth::id()) {
+            $user = auth('api')->user();
+            if (!$user) return response()->json(['error' => 'Unauthorized. Please log in.'], 401);
+            if ($question->run->user_id !== $user->user_id) {
                 return response()->json(['error' => 'Unauthorized'], 403);
             }
 
@@ -139,7 +147,9 @@ class QuestionOptionController extends Controller
     {
         try {
             $question = Question::findOrFail($questionId);
-            if ($question->run->user_id !== Auth::id()) {
+            $user = auth('api')->user();
+            if (!$user) return response()->json(['error' => 'Unauthorized. Please log in.'], 401);
+            if ($question->run->user_id !== $user->user_id) {
                 return response()->json(['error' => 'Unauthorized'], 403);
             }
 
@@ -164,7 +174,9 @@ class QuestionOptionController extends Controller
     {
         try {
             $question = Question::findOrFail($questionId);
-            if ($question->run->user_id !== Auth::id()) {
+            $user = auth('api')->user();
+            if (!$user) return response()->json(['error' => 'Unauthorized. Please log in.'], 401);
+            if ($question->run->user_id !== $user->user_id) {
                 return response()->json(['error' => 'Unauthorized'], 403);
             }
 

@@ -7,6 +7,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Models\User;
 use App\Models\Run;
 use App\Models\Flag;
+use App\Models\RunType;
 use Tymon\JWTAuth\Facades\JWTAuth;
 
 class RunApiTest extends TestCase
@@ -22,6 +23,9 @@ class RunApiTest extends TestCase
 
         // Create user
         $this->user = User::factory()->create();
+
+        // Ensure there is at least one run type for FK constraints
+        RunType::create(['run_type_name' => 'Default']);
 
         // Generate JWT token
         $this->token = JWTAuth::fromUser($this->user);

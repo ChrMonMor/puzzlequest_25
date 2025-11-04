@@ -125,7 +125,7 @@ class AuthController extends Controller
 
     public function me()
     {
-        $user = auth()->user();
+        $user = auth('api')->user();
         if (!$user) {
             return response()->json([
                 'error' => 'Unauthorized. Please log in.'
@@ -166,7 +166,9 @@ class AuthController extends Controller
     public function deleteAccount()
     {
         $user = auth('api')->user();
-        $user->delete();
+        if ($user) {
+            $user->delete();
+        }
 
         return response()->json(['message' => 'Account deleted']);
     }

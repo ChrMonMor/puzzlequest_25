@@ -43,7 +43,9 @@ class QuestionController extends Controller
     public function store(Request $request)
     {
         try {
-            $userId = Auth::id();
+            $user = auth('api')->user();
+            if (!$user) return response()->json(['error' => 'Unauthorized. Please log in.'], 401);
+            $userId = $user->user_id;
             $runId = $request->input('run_id');
 
             $run = Run::findOrFail($runId);
@@ -72,11 +74,13 @@ class QuestionController extends Controller
     }
 
     // Update question (only owner of run)
-    public function update(Request $request)
+    public function update(Request $request, $id)
     {
         try {
-            $question = Question::findOrFail($request->id);
-            if ($question->run->user_id !== Auth::id()) {
+            $question = Question::findOrFail($id);
+            $user = auth('api')->user();
+            if (!$user) return response()->json(['error' => 'Unauthorized. Please log in.'], 401);
+            if ($question->run->user_id !== $user->user_id) {
                 return response()->json(['error' => 'Unauthorized'], 403);
             }
 
@@ -105,7 +109,9 @@ class QuestionController extends Controller
     {
         try {
             $question = Question::findOrFail($id);
-            if ($question->run->user_id !== Auth::id()) {
+            $user = auth('api')->user();
+            if (!$user) return response()->json(['error' => 'Unauthorized. Please log in.'], 401);
+            if ($question->run->user_id !== $user->user_id) {
                 return response()->json(['error' => 'Unauthorized'], 403);
             }
 
@@ -122,7 +128,9 @@ class QuestionController extends Controller
     {
         try {
             $run = Run::findOrFail($runId);
-            if ($run->user_id !== Auth::id()) {
+            $user = auth('api')->user();
+            if (!$user) return response()->json(['error' => 'Unauthorized. Please log in.'], 401);
+            if ($run->user_id !== $user->user_id) {
                 return response()->json(['error' => 'Unauthorized'], 403);
             }
 
@@ -151,7 +159,9 @@ class QuestionController extends Controller
     {
         try {
             $run = Run::findOrFail($runId);
-            if ($run->user_id !== Auth::id()) {
+            $user = auth('api')->user();
+            if (!$user) return response()->json(['error' => 'Unauthorized. Please log in.'], 401);
+            if ($run->user_id !== $user->user_id) {
                 return response()->json(['error' => 'Unauthorized'], 403);
             }
 
@@ -176,7 +186,9 @@ class QuestionController extends Controller
     {
         try {
             $run = Run::findOrFail($runId);
-            if ($run->user_id !== Auth::id()) {
+            $user = auth('api')->user();
+            if (!$user) return response()->json(['error' => 'Unauthorized. Please log in.'], 401);
+            if ($run->user_id !== $user->user_id) {
                 return response()->json(['error' => 'Unauthorized'], 403);
             }
 
