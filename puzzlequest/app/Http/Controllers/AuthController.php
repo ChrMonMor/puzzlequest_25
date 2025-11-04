@@ -250,4 +250,94 @@ class AuthController extends Controller
 
         return response()->json(['message' => 'Password reset successfully.']);
     }
+
+    public function initGuest(Request $request)
+    {
+        $request->validate([
+            'guest_name' => 'nullable|string|max:50',
+        ]);
+
+        $guest_uuid = (string) Str::uuid();
+
+        $name = $request->input('guest_name');
+        if (empty($name)) {
+            $name = 'Guest ' . substr($guest_uuid, 0, 8);
+        }
+
+        $guestData = [
+            'guest_uuid' => $guest_uuid,
+            'guest_name'=> $name,
+            'created_at' => now(),
+        ];
+
+        // Cache guest for 1 day (adjust duration as needed)
+        Cache::put("guest:{$guest_uuid}", $guestData, now()->addDay());
+
+        return response()->json([
+            'guest_uuid' => $guest_uuid,
+            'guest_name'=> $name,
+            'expires_at' => now()->addDay()->toDateTimeString(),
+        ]);
+    }
+    public function endGuest(Request $request)
+    {
+        $token = $request->bearerToken() ?? $request->query('guest_token');
+
+        if (!$token) {
+            return response()->json(['error' => 'Guest token missing'], 401);
+        }
+
+        if (!Cache::has("guest:{$token}")) {
+            return response()->json(['error' => 'Invalid or expired guest token'], 404);
+        }
+
+        Cache::forget("guest:{$token}");
+
+        return response()->json(['message' => 'Guest session ended successfully']);
+    }
+
+    public function upgradeGuest(Request $request)
+    {
+        $token = $request->bearerToken() ?? $request->input('guest_token');
+
+        if (!$token) {
+            return response()->json(['error' => 'Guest token missing'], 401);
+        }
+
+        $guest = Cache::get("guest:{$token}");
+
+        if (!$guest) {
+            return response()->json(['error' => 'Invalid or expired guest token'], 401);
+        }
+
+        // Validate registration input
+        $validated = $request->validate([
+            'username' => 'required|string|max:50',
+            'email' => 'required|email|unique:users,email',
+            'password' => 'required|string|min:6|confirmed',
+        ]);
+
+        // Create the user
+        $user = User::create([
+            'name' => $validated['username'],
+            'email' => $validated['email'],
+            'password' => Hash::make($validated['password']),
+        ]);
+
+        // Remove guest from cache
+        Cache::forget("guest:{$token}");
+
+        // Generate JWT token for the new user
+        try {
+            $jwt = JWTAuth::fromUser($user);
+        } catch (\Exception $e) {
+            return response()->json(['error' => 'Failed to generate token'], 500);
+        }
+
+        return response()->json([
+            'message' => 'Guest upgraded successfully',
+            'user' => $user,
+            'token' => $jwt,
+        ]);
+    }
 }
