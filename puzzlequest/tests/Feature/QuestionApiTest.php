@@ -7,12 +7,21 @@ use App\Models\Run;
 use App\Models\Flag;
 use App\Models\Question;
 use App\Models\QuestionOption;
+use App\Models\QuestionType;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
 class QuestionApiTest extends ApiTestCase
 {
     
     use RefreshDatabase;
+    
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        // Ensure there is at least one question type for FK constraints
+        QuestionType::create(['question_type_name' => 'Default']);
+    }
     
     /** @test */
     public function user_can_create_question_with_options()

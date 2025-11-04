@@ -8,6 +8,7 @@ use App\Models\Run;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Exception;
 
 class QuestionController extends Controller
@@ -15,7 +16,7 @@ class QuestionController extends Controller
     public function __construct()
     {
         $this->middleware('auth:api')->except(['index','show']);
-        $this->middleware(\App\Http\Middleware\BlockGuestMiddleware::class)->only(['store', 'update', 'destroy']);
+        $this->middleware(\App\Http\Middleware\BlockGuestMiddleware::class)->only(['store', 'storeWithAnswer', 'update', 'destroy']);
     }
     // List all questions (with options, type, run, flag)
     public function index()
@@ -58,13 +59,32 @@ class QuestionController extends Controller
                 'question_type' => 'required|exists:question_types,question_type_id',
                 'question_text' => 'required|string',
                 'question_answer' => 'nullable|string',
+                'options' => 'nullable|array',
+                'options.*.question_option_text' => 'required_with:options|string',
             ]);
 
             if ($validator->fails()) {
                 return response()->json(['errors' => $validator->errors()], 422);
             }
 
-            $question = Question::create($request->only(['run_id', 'flag_id', 'question_type', 'question_text', 'question_answer']));
+            // Use transaction so question and its options are created atomically
+            $question = DB::transaction(function () use ($request) {
+                $q = Question::create($request->only(['run_id', 'flag_id', 'question_type', 'question_text', 'question_answer']));
+
+                $options = $request->input('options', []);
+                if (is_array($options) && count($options) > 0) {
+                    foreach ($options as $opt) {
+                        // Only allow the expected field(s)
+                        QuestionOption::create([
+                            'question_id' => $q->question_id,
+                            'question_option_text' => $opt['question_option_text'] ?? null,
+                        ]);
+                    }
+                }
+
+                return $q;
+            });
+
             $question->load(['options', 'questionType', 'flag', 'run']);
 
             return response()->json(['message' => 'Question created', 'question' => $question], 201);
@@ -152,6 +172,83 @@ class QuestionController extends Controller
             return response()->json(['message' => 'Questions created', 'questions' => $createdQuestions], 201);
         } catch (Exception $e) {
             return response()->json(['error' => 'Failed to bulk create questions', 'details' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * Create a question with multiple options and designate one option as the answer.
+     *
+     * Expected payload:
+     * - run_id (uuid)
+     * - flag_id (nullable)
+     * - question_type (int)
+     * - question_text (string)
+     * - options: array of { question_option_text: string, is_answer?: bool }
+     * Alternatively you can provide `answer_index` (int) to mark which option is the answer (0-based).
+     * The controller will save the question and its options atomically and store the answer as
+     * the integer index of the correct option in `question_answer`.
+     */
+    public function storeWithAnswer(Request $request)
+    {
+        try {
+            $user = auth('api')->user();
+            if (!$user) return response()->json(['error' => 'Unauthorized. Please log in.'], 401);
+            $userId = $user->user_id;
+
+            $runId = $request->input('run_id');
+            $run = Run::findOrFail($runId);
+            if ($run->user_id !== $userId) {
+                return response()->json(['error' => 'Unauthorized'], 403);
+            }
+
+            $validator = Validator::make($request->all(), [
+                'flag_id' => 'nullable|exists:flags,flag_id',
+                'question_type' => 'required|exists:question_types,question_type_id',
+                'question_text' => 'required|string',
+                'options' => 'required|array|min:1',
+                'options.*.question_option_text' => 'required|string',
+                'options.*.is_answer' => 'sometimes|boolean',
+                'answer_index' => 'sometimes|integer|min:0',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json(['errors' => $validator->errors()], 422);
+            }
+
+            $question = DB::transaction(function () use ($request) {
+                $q = Question::create($request->only(['run_id', 'flag_id', 'question_type', 'question_text']));
+
+                $options = $request->input('options', []);
+                $answerIndex = null;
+                foreach ($options as $idx => $opt) {
+                    $created = QuestionOption::create([
+                        'question_id' => $q->question_id,
+                        'question_option_text' => $opt['question_option_text'] ?? null,
+                    ]);
+
+                    if (!is_null($opt['is_answer'] ?? null) && $opt['is_answer']) {
+                        $answerIndex = $idx;
+                    }
+                }
+
+                // If answer_index explicitly provided, prefer it
+                if ($request->filled('answer_index')) {
+                    $answerIndex = (int) $request->input('answer_index');
+                }
+
+                // If we found an answer index, store it (as integer). If not, leave null/0 per schema.
+                if (!is_null($answerIndex)) {
+                    $q->question_answer = $answerIndex;
+                    $q->save();
+                }
+
+                return $q;
+            });
+
+            $question->load(['options', 'questionType', 'flag', 'run']);
+            return response()->json(['message' => 'Question with options created', 'question' => $question], 201);
+        } catch (Exception $e) {
+            return response()->json(['error' => 'Failed to create question with options', 'details' => $e->getMessage()], 500);
         }
     }
 
