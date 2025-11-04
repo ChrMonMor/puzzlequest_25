@@ -340,4 +340,17 @@ class AuthController extends Controller
             'token' => $jwt,
         ]);
     }
+    
+    public function getGuestInfo(Request $request)
+    {
+        $token = $request->bearerToken() ?? $request->query('guest_token');
+
+        if (!$token || !Cache::has("guest:{$token}")) {
+            return response()->json(['error' => 'Invalid or missing guest token'], 404);
+        }
+
+        $guest = Cache::get("guest:{$token}");
+
+        return response()->json(['guest' => $guest]);
+    }
 }
