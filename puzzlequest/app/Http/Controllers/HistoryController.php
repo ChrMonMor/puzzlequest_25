@@ -14,53 +14,69 @@ class HistoryController extends Controller
 {
     public function __construct()
     {
-        // Block session-only guests from mutating actions
-        $this->middleware(\App\Http\Middleware\BlockGuestMiddleware::class)->only(['store', 'update', 'destroy']);
+        // Block session-only guests from mutating actions if needed
+        $this->middleware(\App\Http\Middleware\BlockGuestMiddleware::class)->only(['destroy']);
     }
+
     /**
-     * Start a new run history for the authenticated user.
+     * Get current actor: either authenticated user or guest token
+     */
+    protected function getActor(Request $request)
+    {
+        $user = auth('api')->user();
+        if ($user) {
+            return ['type' => 'user', 'id' => $user->user_id];
+        }
+
+        $guestToken = $request->bearerToken() ?? $request->query('guest_token');
+        if ($guestToken) {
+            return ['type' => 'guest', 'id' => $guestToken];
+        }
+
+        return null;
+    }
+
+    /**
+     * Start a new run history for the actor (user or guest)
      */
     public function startRun(Request $request, $runId)
     {
         try {
-            $user = auth('api')->user();
-            if (!$user) {
-                return response()->json(['error' => 'Unauthorized. Please log in.'], 401);
+            $actor = $this->getActor($request);
+            if (!$actor) {
+                return response()->json(['error' => 'Unauthorized. Please log in or provide guest token.'], 401);
             }
 
             $run = Run::with('flags')->findOrFail($runId);
 
-            // Prevent duplicate active histories for the same run
-            $existing = History::where('user_id', $user->user_id)
-                ->where('run_id', $runId)
-                ->whereNull('history_end')
-                ->first();
-
-            if ($existing) {
-                return response()->json([
-                    'error' => 'You already have an active history for this run.'
-                ], 409);
-            }
-
             $validator = Validator::make($request->all(), [
-                'history_run_position' => 'nullable|string|max:255', // could be lat/long
+                'history_run_position' => 'nullable|string|max:255',
             ]);
 
             if ($validator->fails()) {
                 return response()->json(['errors' => $validator->errors()], 422);
             }
 
-            // Transactionally create the history and its flags
-            $history = DB::transaction(function () use ($run, $user, $request) {
+            // Use transaction + locking to prevent duplicate active histories
+            $history = DB::transaction(function () use ($actor, $run, $request) {
+                $existing = History::where('user_id', $actor['id'])
+                    ->where('run_id', $run->run_id)
+                    ->whereNull('history_end')
+                    ->lockForUpdate()
+                    ->first();
+
+                if ($existing) {
+                    throw new Exception('You already have an active history for this run.');
+                }
+
                 $h = History::create([
-                    'user_id' => $user->user_id,
+                    'user_id' => $actor['id'],
                     'run_id' => $run->run_id,
                     'history_start' => now(),
                     'history_run_type' => $run->run_type,
                     'history_run_position' => $request->input('history_run_position'),
                 ]);
 
-                // Copy flags from run to history_flags
                 foreach ($run->flags as $flag) {
                     HistoryFlag::create([
                         'history_id' => $h->history_id,
@@ -84,23 +100,27 @@ class HistoryController extends Controller
             ], 201);
 
         } catch (Exception $e) {
-            return response()->json([
-                'error' => 'Failed to start run',
-                'details' => $e->getMessage()
-            ], 500);
+            $status = $e->getMessage() === 'You already have an active history for this run.' ? 409 : 500;
+            return response()->json(['error' => $e->getMessage()], $status);
         }
     }
 
     /**
      * Mark the run as finished.
      */
-    public function endRun($historyId)
+    public function endRun(Request $request, $historyId)
     {
         try {
-            $user = auth('api')->user();
-            $history = History::findOrFail($historyId);
+            $actor = $this->getActor($request);
+            if (!$actor) {
+                return response()->json(['error' => 'Unauthorized'], 401);
+            }
 
-            if ($history->user_id !== $user->user_id) {
+            $history = History::where('history_id', $historyId)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if ($history->user_id !== $actor['id']) {
                 return response()->json(['error' => 'Unauthorized'], 403);
             }
 
@@ -121,10 +141,16 @@ class HistoryController extends Controller
     public function markFlagReached(Request $request, $historyId, $flagId)
     {
         try {
-            $user = auth('api')->user();
-            $history = History::findOrFail($historyId);
+            $actor = $this->getActor($request);
+            if (!$actor) {
+                return response()->json(['error' => 'Unauthorized'], 401);
+            }
 
-            if ($history->user_id !== $user->user_id) {
+            $history = History::where('history_id', $historyId)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if ($history->user_id !== $actor['id']) {
                 return response()->json(['error' => 'Unauthorized'], 403);
             }
 
@@ -147,13 +173,17 @@ class HistoryController extends Controller
     }
 
     /**
-     * Get user’s run history list
+     * Get all histories for the actor (user or guest)
      */
-    public function index()
+    public function index(Request $request)
     {
-        $user = auth('api')->user();
+        $actor = $this->getActor($request);
+        if (!$actor) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
         $histories = History::with(['run', 'flags'])
-            ->where('user_id', $user->user_id)
+            ->where('user_id', $actor['id'])
             ->orderByDesc('history_start')
             ->get();
 
@@ -163,12 +193,16 @@ class HistoryController extends Controller
     /**
      * Show one history record with all flags
      */
-    public function show($historyId)
+    public function show(Request $request, $historyId)
     {
-        $user = auth('api')->user();
+        $actor = $this->getActor($request);
+        if (!$actor) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
         $history = History::with(['run', 'flags'])->findOrFail($historyId);
 
-        if ($history->user_id !== $user->user_id) {
+        if ($history->user_id !== $actor['id']) {
             return response()->json(['error' => 'Unauthorized'], 403);
         }
 

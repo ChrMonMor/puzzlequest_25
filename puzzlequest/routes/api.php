@@ -142,3 +142,12 @@ Route::prefix('question-types')->group(function () {
         Route::delete('{id}', [QuestionTypeController::class, 'destroy']);
     });
 });
+
+// -------------------- HISTORY ROUTES --------------------
+Route::prefix('history')->group(function () {
+    Route::post('run/{runId}/start', [HistoryController::class, 'startRun']); // starts a new run (user or guest)
+    Route::post('run/{historyId}/end', [HistoryController::class, 'endRun']); // ends a run
+    Route::post('run/{historyId}/flag/{flagId}/reach', [HistoryController::class, 'markFlagReached']); // marks a flag as reached
+    Route::get('/', [HistoryController::class, 'index']); // gets list of all histories for current actor (user or guest)
+    Route::get('{historyId}', [HistoryController::class, 'show']); // gets a single history
+});
