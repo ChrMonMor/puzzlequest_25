@@ -12,14 +12,14 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('history_flags', function (Blueprint $table) {
-            $table->integer('history_flag_id')->primary();
+            $table->id('history_flag_id')->primary();
             $table->uuid('history_id');
-            $table->timestamp('history_flag_reached');
-            $table->double('history_flag_long');
-            $table->double('history_flag_lat');
+            $table->timestamp('history_flag_reached')->nullable();
+            $table->double('history_flag_long')->nullable();
+            $table->double('history_flag_lat')->nullable();
             $table->double('history_flag_distance')->nullable();
-            $table->double('history_flag_type');
-            $table->integer('history_flag_point');
+            $table->double('history_flag_type')->nullable();
+            $table->integer('history_flag_point')->nullable();
 
             $table->foreign('history_id')->references('history_id')->on('histories')->onDelete('cascade');
         });

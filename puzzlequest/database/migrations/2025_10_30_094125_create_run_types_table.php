@@ -12,7 +12,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('run_types', function (Blueprint $table) {
-            $table->integer('run_type_id')->primary();
+            $table->id('run_type_id')->primary();
             $table->string('run_type_name', 255);
         });
     }
