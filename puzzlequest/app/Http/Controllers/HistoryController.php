@@ -75,6 +75,7 @@ class HistoryController extends Controller
                     'history_start' => now(),
                     'history_run_type' => $run->run_type,
                     'history_run_position' => $request->input('history_run_position'),
+                    'history_run_update' => $run->run_last_update,
                 ]);
 
                 foreach ($run->flags as $flag) {

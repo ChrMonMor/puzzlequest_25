@@ -45,7 +45,10 @@ class QuestionController extends Controller
     {
         try {
             $user = auth('api')->user();
-            if (!$user) return response()->json(['error' => 'Unauthorized. Please log in.'], 401);
+            if (!$user) {
+                return response()->json(['error' => 'Unauthorized. Please log in.'], 401);
+            }
+
             $userId = $user->user_id;
             $runId = $request->input('run_id');
 
@@ -54,12 +57,13 @@ class QuestionController extends Controller
                 return response()->json(['error' => 'Unauthorized'], 403);
             }
 
+            // Validation (no question_answer rule)
             $validator = Validator::make($request->all(), [
+                'run_id' => 'required|exists:runs,run_id',
                 'flag_id' => 'nullable|exists:flags,flag_id',
                 'question_type' => 'required|exists:question_types,question_type_id',
                 'question_text' => 'required|string',
-                'question_answer' => 'nullable|string',
-                'options' => 'nullable|array',
+                'options' => 'nullable|array|min:1',
                 'options.*.question_option_text' => 'required_with:options|string',
             ]);
 
@@ -67,18 +71,35 @@ class QuestionController extends Controller
                 return response()->json(['errors' => $validator->errors()], 422);
             }
 
-            // Use transaction so question and its options are created atomically
+            // Transaction for safety
             $question = DB::transaction(function () use ($request) {
-                $q = Question::create($request->only(['run_id', 'flag_id', 'question_type', 'question_text', 'question_answer']));
-
                 $options = $request->input('options', []);
+                $firstOptionText = null;
+
                 if (is_array($options) && count($options) > 0) {
+                    $firstOptionText = $options[0]['question_option_text'] ?? null;
+                }
+
+                // Create question first (without question_answer)
+                $q = Question::create([
+                    'run_id' => $request->input('run_id'),
+                    'flag_id' => $request->input('flag_id'),
+                    'question_type' => $request->input('question_type'),
+                    'question_text' => $request->input('question_text'),
+                ]);
+
+                // Create all options if provided
+                if (!empty($options)) {
                     foreach ($options as $opt) {
-                        // Only allow the expected field(s)
                         QuestionOption::create([
                             'question_id' => $q->question_id,
-                            'question_option_text' => $opt['question_option_text'] ?? null,
+                            'question_option_text' => $opt['question_option_text'],
                         ]);
+                    }
+
+                    // After creating options, set first one as question_answer
+                    if ($firstOptionText) {
+                        $q->update(['question_answer' => $firstOptionText]);
                     }
                 }
 
@@ -87,11 +108,20 @@ class QuestionController extends Controller
 
             $question->load(['options', 'questionType', 'flag', 'run']);
 
-            return response()->json(['message' => 'Question created', 'question' => $question], 201);
+            return response()->json([
+                'message' => 'Question created successfully',
+                'question' => $question,
+            ], 201);
+
         } catch (Exception $e) {
-            return response()->json(['error' => 'Failed to create question', 'details' => $e->getMessage()], 500);
+            return response()->json([
+                'error' => 'Failed to create question',
+                'details' => $e->getMessage(),
+            ], 500);
         }
     }
+
+
 
     // Update question (only owner of run)
     public function update(Request $request, $id)
@@ -175,19 +205,6 @@ class QuestionController extends Controller
         }
     }
 
-    /**
-     * Create a question with multiple options and designate one option as the answer.
-     *
-     * Expected payload:
-     * - run_id (uuid)
-     * - flag_id (nullable)
-     * - question_type (int)
-     * - question_text (string)
-     * - options: array of { question_option_text: string, is_answer?: bool }
-     * Alternatively you can provide `answer_index` (int) to mark which option is the answer (0-based).
-     * The controller will save the question and its options atomically and store the answer as
-     * the integer index of the correct option in `question_answer`.
-     */
     public function storeWithAnswer(Request $request)
     {
         try {

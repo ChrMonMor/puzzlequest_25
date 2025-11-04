@@ -31,7 +31,7 @@ Route::prefix('guests')->group(function () {
     Route::post('/init', [AuthController::class, 'initGuest']); // public
     Route::post('/end', [AuthController::class, 'endGuest']); // requires guest token
     Route::get('/info', [AuthController::class, 'getGuestInfo']); // requires guest token
-    Route::post('/upgrade', [AuthController::class, 'upgradeGuest']); // requires guest token
+    Route::post('/upgrade', [AuthController::class, 'upgradeGuest']); // requires guest token 
 });
 
 // -------------------- USER ROUTES --------------------

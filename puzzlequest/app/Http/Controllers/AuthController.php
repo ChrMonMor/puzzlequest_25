@@ -296,6 +296,9 @@ class AuthController extends Controller
         return response()->json(['message' => 'Guest session ended successfully']);
     }
 
+    /**
+     * Work in progress
+     */
     public function upgradeGuest(Request $request)
     {
         $token = $request->bearerToken() ?? $request->input('guest_token');
@@ -319,9 +322,9 @@ class AuthController extends Controller
 
         // Create the user
         $user = User::create([
-            'name' => $validated['username'],
-            'email' => $validated['email'],
-            'password' => Hash::make($validated['password']),
+            'user_name' => $validated['username'],
+            'user_email' => $validated['email'],
+            'user_password' => Hash::make($validated['password']),
         ]);
 
         // Remove guest from cache
