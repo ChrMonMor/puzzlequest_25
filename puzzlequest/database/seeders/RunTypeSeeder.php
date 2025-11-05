@@ -14,6 +14,7 @@ class RunTypeSeeder extends Seeder
     {
         // Example run types
         $runTypes = [
+            ['run_type_name' => 'Private'],
             ['run_type_name' => 'Sprint'],
             ['run_type_name' => 'Free Run'],
             ['run_type_name' => 'Trail Run'],
