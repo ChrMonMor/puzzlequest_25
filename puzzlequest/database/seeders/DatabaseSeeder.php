@@ -18,7 +18,7 @@ class DatabaseSeeder extends Seeder
             FlagSeeder::class,
             QuestionTypeSeeder::class,
             QuestionSeeder::class,
-            QuestionOptionSeeder::class,
+            // QuestionOptionSeeder::class, // Commented out to avoid duplicate seeding
             HistorySeeder::class,
         ]);
     }

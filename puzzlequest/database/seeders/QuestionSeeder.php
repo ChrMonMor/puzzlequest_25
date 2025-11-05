@@ -7,6 +7,7 @@ use App\Models\Question;
 use App\Models\Run;
 use App\Models\Flag;
 use App\Models\QuestionType;
+use App\Models\QuestionOption;
 
 class QuestionSeeder extends Seeder
 {
@@ -34,7 +35,19 @@ class QuestionSeeder extends Seeder
                     'flag_id' => $flag->flag_id,
                     'question_type' => $questionType->question_type_id,
                     'question_text' => "Sample question {$i} for flag {$flag->flag_number}",
-                    'question_answer' => "{$i}",
+                ]);
+                
+                $questions = Question::all();
+                for ($i = 1; $i <= 4; $i++) {
+                    QuestionOption::create([
+                        'question_id' => $questions->last()->question_id,
+                        'question_option_text' => "Option {$i} for question: {$questions->last()->question_text}",
+                    ]);
+                }
+                
+                $questionOptions = QuestionOption::all()->where('question_id', $questions->last()->question_id);
+                $questions->last()->update([
+                    'question_answer' => $questionOptions->random()->question_option_id,
                 ]);
             }
         }

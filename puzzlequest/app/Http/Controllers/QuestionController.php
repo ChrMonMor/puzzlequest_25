@@ -57,7 +57,7 @@ class QuestionController extends Controller
                 return response()->json(['error' => 'Unauthorized'], 403);
             }
 
-            // Validation (no question_answer rule)
+            // Validation
             $validator = Validator::make($request->all(), [
                 'run_id' => 'required|exists:runs,run_id',
                 'flag_id' => 'nullable|exists:flags,flag_id',
@@ -74,13 +74,8 @@ class QuestionController extends Controller
             // Transaction for safety
             $question = DB::transaction(function () use ($request) {
                 $options = $request->input('options', []);
-                $firstOptionText = null;
 
-                if (is_array($options) && count($options) > 0) {
-                    $firstOptionText = $options[0]['question_option_text'] ?? null;
-                }
-
-                // Create question first (without question_answer)
+                // Step 1: Create the question
                 $q = Question::create([
                     'run_id' => $request->input('run_id'),
                     'flag_id' => $request->input('flag_id'),
@@ -88,19 +83,25 @@ class QuestionController extends Controller
                     'question_text' => $request->input('question_text'),
                 ]);
 
-                // Create all options if provided
+                // Step 2: Create options
+                $firstOptionId = null;
                 if (!empty($options)) {
-                    foreach ($options as $opt) {
-                        QuestionOption::create([
+                    foreach ($options as $index => $opt) {
+                        $option = QuestionOption::create([
                             'question_id' => $q->question_id,
                             'question_option_text' => $opt['question_option_text'],
                         ]);
-                    }
 
-                    // After creating options, set first one as question_answer
-                    if ($firstOptionText) {
-                        $q->update(['question_answer' => $firstOptionText]);
+                        // Capture first option’s ID
+                        if ($index === 0) {
+                            $firstOptionId = $option->question_option_id;
+                        }
                     }
+                }
+
+                // Step 3: Update question with the first option ID as the answer
+                if ($firstOptionId) {
+                    $q->update(['question_answer' => $firstOptionId]);
                 }
 
                 return $q;
@@ -120,6 +121,7 @@ class QuestionController extends Controller
             ], 500);
         }
     }
+
 
 
 

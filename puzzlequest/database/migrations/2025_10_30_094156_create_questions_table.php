@@ -17,7 +17,7 @@ return new class extends Migration
             $table->integer('flag_id')->nullable();
             $table->integer('question_type');
             $table->string('question_text', 255);
-            $table->integer('question_answer');
+            $table->uuid('question_answer')->nullable();
 
             $table->foreign('run_id')->references('run_id')->on('runs')->onDelete('cascade');
             $table->foreign('question_type')->references('question_type_id')->on('question_types');
