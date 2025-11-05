@@ -114,7 +114,7 @@ class WebAuthController extends Controller
         $user = User::create([
             'user_name'  => $request->username,
             'user_email' => $request->email,
-            'password'   => Hash::make($request->password),
+            'user_password'   => Hash::make($request->password),
         ]);
 
         // 🔐 Optionally issue a JWT right after registration
