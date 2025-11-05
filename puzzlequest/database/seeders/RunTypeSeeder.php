@@ -19,6 +19,7 @@ class RunTypeSeeder extends Seeder
             ['run_type_name' => 'Trail Run'],
             ['run_type_name' => 'Obstacle Course'],
             ['run_type_name' => 'Orienteering Run'],
+            ['run_type_name' => 'Hike'],
         ];
 
         foreach ($runTypes as $type) {
