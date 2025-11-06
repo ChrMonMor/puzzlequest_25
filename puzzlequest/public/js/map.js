@@ -1,9 +1,5 @@
-// Fallback copy of resources/js/map.js for environments without Vite.
-// Note: removed the `import 'whatwg-fetch'` bundler import (modern browsers have fetch).
-
-// Leaflet loaded via CDN in the Blade view. This script assumes `L` is available.
 document.addEventListener('DOMContentLoaded', () => {
-    // Helper to pull token from localStorage (project-specific)
+    // --- Helper to get JWT auth headers ---
     function getAuthHeaders() {
         const headers = { 'Content-Type': 'application/json' };
         const token = localStorage.getItem('jwt') || localStorage.getItem('token') || (window.__SERVER_JWT || null);
@@ -11,283 +7,305 @@ document.addEventListener('DOMContentLoaded', () => {
         return headers;
     }
 
-    // Initialize map
+    // --- Map setup ---
     const mapEl = document.getElementById('map');
     if (!mapEl) return;
 
-    const map = L.map(mapEl).setView([51.505, -0.09], 13);
+    const map = L.map(mapEl);
+    if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+            pos => map.setView([pos.coords.latitude, pos.coords.longitude], 13),
+            () => map.setView([51.505, -0.09], 13)
+        );
+    } else map.setView([51.505, -0.09], 13);
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19,
         attribution: '&copy; OpenStreetMap contributors'
     }).addTo(map);
 
-    // Marker storage
-    const savedMarkers = new Map(); // key: flag_id or custom id -> marker
-
-    // Modal elements
-    const modal = document.getElementById('marker-modal');
-    const modalQuestionInput = document.getElementById('modal-question-text');
-    const modalSaveBtn = document.getElementById('modal-save');
-    const modalCancelBtn = document.getElementById('modal-cancel');
-    const modalStatus = document.getElementById('modal-status');
-
-    // Run creation / selection elements
+    // --- DOM Elements ---
     const runTitleInput = document.getElementById('run-title');
     const runDescInput = document.getElementById('run-description');
     const runTypeSelect = document.getElementById('run-type');
     const createRunBtn = document.getElementById('create-run');
     const createRunStatus = document.getElementById('create-run-status');
     const currentRunDisplay = document.getElementById('current-run');
-    const modalRunDisplay = document.getElementById('modal-run-display');
+
+    const questionsContainer = document.getElementById('questions-container'); // you need to add this div in Blade
+    const pinSelector = document.getElementById('pin-selector'); // you need to add this select in Blade
 
     let currentRunId = null;
-
     let activeTempMarker = null;
+    let tempMarkerCounter = 1; // starts counting from 1 for human readability
+    const savedMarkers = new Map(); // flag_id -> Leaflet marker
 
-    function showModal() {
-        modal.classList.remove('hidden');
+    // --- Utility ---
+    function escapeHtml(s) {
+        if (!s) return '';
+        return s.replace(/[&"'<>]/g, c => ({'&':'&amp;','"':'&quot;',"'":'&#39;','<':'&lt;','>':'&gt;'})[c]);
     }
-    function hideModal() {
-        modal.classList.add('hidden');
-        modalStatus.textContent = '';
-    }
 
-    modalCancelBtn.addEventListener('click', (e) => {
-        e.preventDefault();
-        if (activeTempMarker) {
-            map.removeLayer(activeTempMarker);
-            activeTempMarker = null;
-        }
-        hideModal();
-    });
-
-    // Load run types and populate select
+    // --- Load Run Types ---
     async function loadRunTypes() {
         try {
             const res = await fetch('/api/run-types/', { headers: getAuthHeaders() });
-            if (!res.ok) {
-                runTypeSelect.innerHTML = '<option value="">(failed to load)</option>';
-                return;
-            }
+            if (!res.ok) return runTypeSelect.innerHTML = '<option value="">(failed to load)</option>';
             const types = await res.json();
             runTypeSelect.innerHTML = '<option value="">Select run type</option>';
-            for (const t of types) {
+            types.forEach(t => {
                 const opt = document.createElement('option');
                 opt.value = t.run_type_id;
                 opt.textContent = t.run_type_name;
                 runTypeSelect.appendChild(opt);
-            }
-        } catch (err) {
-            console.error('Failed to load run types', err);
-            runTypeSelect.innerHTML = '<option value="">(error)</option>';
-        }
+            });
+        } catch(e) { console.error(e); runTypeSelect.innerHTML = '<option value="">(error)</option>'; }
     }
 
-    // Create run handler
+    // --- Create Run ---
     createRunBtn.addEventListener('click', async (ev) => {
         ev.preventDefault();
         createRunStatus.textContent = 'Creating...';
+
         const title = runTitleInput.value.trim();
         const desc = runDescInput.value.trim();
         const runTypeId = runTypeSelect.value;
 
-        if (!title) {
-            createRunStatus.textContent = 'Title is required.';
-            return;
-        }
-        if (!runTypeId) {
-            createRunStatus.textContent = 'Please select a run type.';
+        if (!title || !runTypeId) {
+            createRunStatus.textContent = 'Title and run type are required.';
             return;
         }
 
         try {
-            const payload = {
-                run_title: title,
-                run_description: desc,
-                run_type: runTypeId,
-            };
             const res = await fetch('/api/runs/', {
                 method: 'POST',
                 headers: getAuthHeaders(),
-                body: JSON.stringify(payload),
+                body: JSON.stringify({ run_title: title, run_description: desc, run_type: runTypeId })
             });
-            if (!res.ok) {
-                const txt = await res.text();
-                createRunStatus.textContent = `Create failed: ${res.status}`;
-                console.error('Create run failed', res.status, txt);
-                return;
-            }
-            const json = await res.json();
-            const run = json.run || json;
-            currentRunId = run.run_id || run.id || null;
-            // Do not display UUIDs in the UI; show only the run title (and type if available)
-            const title = run.run_title || run.title || 'Run';
-            currentRunDisplay.textContent = title ? `Current run: ${title}` : 'Run created';
-            modalRunDisplay.textContent = title ? `${title}` : 'Run created';
+
+            if (!res.ok) throw new Error(`Status ${res.status}`);
+            const run = (await res.json()).run;
+            currentRunId = run?.run_id || null;
+            currentRunDisplay.textContent = `Current run: ${run?.run_title || 'Run'}`;
             createRunStatus.textContent = 'Created.';
-        } catch (err) {
-            console.error('Create run error', err);
-            createRunStatus.textContent = 'Create failed (see console)';
+        } catch(e) {
+            console.error(e);
+            createRunStatus.textContent = 'Failed to create run.';
         }
     });
 
-    // Load existing flags (with questions) and display as pins
+    // --- Load Pins ---
     async function loadPins() {
+        if (!pinSelector) return;
+
+        // Only fetch if a run is selected
+        if (!currentRunId) {
+            console.warn('No run selected; skipping loadPins');
+            // Clear any existing markers and dropdown
+            savedMarkers.forEach(m => map.removeLayer(m));
+            savedMarkers.clear();
+            pinSelector.innerHTML = '<option value="">-- Select a pin --</option>';
+            return;
+        }
+
         try {
-            const res = await fetch('/api/flags', { headers: getAuthHeaders() });
-            if (!res.ok) {
-                console.warn('Could not load flags', res.status);
-                return;
-            }
+            const res = await fetch('/api/flags/', { 
+                headers: getAuthHeaders(),
+                method: 'GET',
+                body: JSON.stringify({ run_id: currentRunId })
+            });
+            if (!res.ok) return;
             const flags = await res.json();
-            // Remove old markers
-            savedMarkers.forEach((m) => map.removeLayer(m));
+
+            // Clear old markers
+            savedMarkers.forEach(m => map.removeLayer(m));
             savedMarkers.clear();
 
-            for (const flag of flags) {
-                if (!flag.flag_lat || !flag.flag_long) continue;
+            // Clear pin selector
+            pinSelector.innerHTML = '<option value="">-- Select a pin --</option>';
+
+            flags.forEach(flag => {
+                if (!flag.flag_lat || !flag.flag_long) return;
+
                 const lat = parseFloat(flag.flag_lat);
                 const lng = parseFloat(flag.flag_long);
-                const m = L.marker([lat, lng]).addTo(map);
+                const marker = L.marker([lat, lng]).addTo(map);
 
-                const question = (flag.questions && flag.questions.length) ? flag.questions[0] : null;
+                const question = flag.questions?.[0];
                 const title = question ? question.question_text : 'Flag';
-                m.bindPopup(`<strong>${escapeHtml(title)}</strong>`);
+                marker.bindPopup(`<strong>${escapeHtml(title)}</strong>`);
 
-                m.on('click', () => {
-                    // Show question details in popup
-                    const lines = [];
-                    lines.push(`<div class="font-semibold mb-1">${escapeHtml(title)}</div>`);
-                    if (question) {
-                        lines.push(`<div class="text-sm text-gray-600">Type: ${escapeHtml(String(question.question_type))}</div>`);
-                        if (question.options && question.options.length) {
-                            lines.push('<div class="mt-2"><em>Options:</em><ul>');
-                            for (const opt of question.options) {
-                                lines.push(`<li>${escapeHtml(opt.question_option_text)}</li>`);
-                            }
-                            lines.push('</ul></div>');
-                        }
-                    }
-                    m.getPopup().setContent(lines.join(''));
-                    m.openPopup();
+                savedMarkers.set(flag.flag_id, marker);
+
+                // Populate dropdown
+                const opt = document.createElement('option');
+                opt.value = flag.flag_id;
+                opt.textContent = title;
+                pinSelector.appendChild(opt);
+            });
+        } catch (e) { console.error('Error loading pins', e); }
+    }
+
+    // --- Add Question Form ---
+    let questionCounter = 1;
+    function createQuestionForm(marker, markerId, getLatLngCallback) {
+        // Container for all questions
+        const questionsContainer = document.getElementById('questions-container');
+        if (!questionsContainer) return;
+
+        // Create a new question block
+        const questionBlock = document.createElement('div');
+        questionBlock.classList.add('question-block', 'border', 'p-2', 'mb-2', 'rounded', 'bg-gray-50');
+
+        // Question title input
+        const questionLabel = document.createElement('label');
+        questionLabel.textContent = `Question #${questionCounter++}`;
+        questionLabel.classList.add('font-semibold', 'block', 'mb-1');
+
+        const questionInput = document.createElement('textarea');
+        questionInput.classList.add('border', 'rounded', 'p-1', 'w-full', 'mb-2');
+        questionInput.placeholder = 'Enter question text';
+
+        // Answer options container
+        const answersContainer = document.createElement('div');
+        answersContainer.classList.add('answers-container', 'mb-2');
+
+        // Function to add a new answer option
+        function addAnswerOption(defaultText = '') {
+            const optDiv = document.createElement('div');
+            optDiv.classList.add('flex', 'items-center', 'mb-1');
+
+            const optInput = document.createElement('input');
+            optInput.type = 'text';
+            optInput.value = defaultText;
+            optInput.placeholder = 'Option text';
+            optInput.classList.add('border', 'rounded', 'p-1', 'flex-1');
+
+            const removeBtn = document.createElement('button');
+            removeBtn.type = 'button';
+            removeBtn.textContent = '×';
+            removeBtn.classList.add('ml-2', 'text-red-500', 'font-bold');
+            removeBtn.addEventListener('click', () => optDiv.remove());
+
+            optDiv.appendChild(optInput);
+            optDiv.appendChild(removeBtn);
+            answersContainer.appendChild(optDiv);
+        }
+
+        // Add initial answer option
+        addAnswerOption();
+
+        // Button to add new answer option
+        const addAnswerBtn = document.createElement('button');
+        addAnswerBtn.type = 'button';
+        addAnswerBtn.textContent = '+ Add Option';
+        addAnswerBtn.classList.add('px-2', 'py-1', 'bg-blue-600', 'text-white', 'rounded', 'mb-2');
+        addAnswerBtn.addEventListener('click', () => addAnswerOption());
+
+        // Save button for this question
+        const saveBtn = document.createElement('button');
+        saveBtn.type = 'button';
+        saveBtn.textContent = 'Save Pin & Question';
+        saveBtn.classList.add('px-3', 'py-1', 'bg-green-600', 'text-white', 'rounded');
+
+        saveBtn.addEventListener('click', async () => {
+            if (!currentRunId) { alert('Please create/select a run first.'); return; }
+
+            const questionText = questionInput.value.trim();
+            if (!questionText) { alert('Question text is required.'); return; }
+
+            const options = Array.from(answersContainer.querySelectorAll('input')).map(i => i.value.trim()).filter(t => t);
+
+            const { lat, lng } = getLatLngCallback();
+
+            try {
+                // 1. Create the flag
+                const flagPayload = { run_id: currentRunId, flag_lat: lat, flag_long: lng, flag_number: 1 };
+                const flagRes = await fetch('/api/flags/', {
+                    method: 'POST',
+                    headers: getAuthHeaders(),
+                    body: JSON.stringify(flagPayload)
                 });
 
-                savedMarkers.set(flag.flag_id || `${lat}_${lng}`, m);
+                if (!flagRes.ok) throw new Error('Flag creation failed');
+                const flagJson = await flagRes.json();
+                const flagId = flagJson.flag_id || flagJson.id;
+
+                // 1.5. Save options if present to array
+                const optionTexts = [];
+                for (const optText of options) {
+                    if (!optText) continue;
+                    optionTexts.push(optText);
+                }
+
+                // 2. Create the question
+                const questionPayload = {
+                    run_id: currentRunId,
+                    flag_id: flagId,
+                    question_type: 1, // default type id
+                    question_text: questionText,
+                    options: optionTexts.map(text => ({ question_option_text: text }))
+                };
+
+                // Send the request
+                const qRes = await fetch('/api/questions/', {
+                    method: 'POST',
+                    headers: getAuthHeaders(),
+                    body: JSON.stringify(questionPayload)
+                });
+
+                if (!qRes.ok) {
+                    const txt = await qRes.text();
+                    console.error('Question create failed', qRes.status, txt);
+                }
+                const qJson = await qRes.json();
+                const questionId = qJson.question_id || qJson.id;
+
+
+                alert('Pin & Question saved successfully!');
+                savedMarkers.set(flagId, marker); // mark this marker as saved
+
+            } catch (err) {
+                console.error(err);
+                alert('Error saving pin/question. Check console.');
             }
-        } catch (err) {
-            console.error('Error loading pins', err);
-        }
+            finally {
+                loadPins(); // remove the form after saving
+            }
+        });
+
+        // Append elements
+        questionBlock.appendChild(questionLabel);
+        questionBlock.appendChild(questionInput);
+        questionBlock.appendChild(answersContainer);
+        questionBlock.appendChild(addAnswerBtn);
+        questionBlock.appendChild(saveBtn);
+
+        questionsContainer.appendChild(questionBlock);
     }
 
-    // Click on map to add draggable marker and open modal
-    map.on('click', (e) => {
-        if (activeTempMarker) map.removeLayer(activeTempMarker);
-        activeTempMarker = L.marker(e.latlng, { draggable: true }).addTo(map);
-        showModal();
+
+    map.on('click', e => {
+        if (!currentRunId) { alert('Please create/select a run first.'); return; }
+
+        const marker = L.marker(e.latlng, { draggable: true }).addTo(map);
+        const tempId = tempMarkerCounter++;
+        savedMarkers.set(tempId, marker);
+
+        marker.bindPopup(`New Pin #${tempId} (drag to reposition)`).openPopup();
+
+        marker.on('dragend', () => {
+            const latlng = marker.getLatLng();
+            marker.getPopup().setContent(`New Pin #${tempId} (dragged to ${latlng.lat.toFixed(5)}, ${latlng.lng.toFixed(5)})`).openPopup();
+        });
+
+        createQuestionForm(marker, tempId, () => marker.getLatLng());
     });
 
-    // Save flow: create a flag then create a question attached to that flag
-    modalSaveBtn.addEventListener('click', async (ev) => {
-        ev.preventDefault();
-        modalStatus.textContent = 'Saving...';
-    const runId = currentRunId;
-        const questionText = modalQuestionInput.value.trim();
 
-        if (!activeTempMarker) {
-            modalStatus.textContent = 'No marker present.';
-            return;
-        }
-        if (!runId) {
-            modalStatus.textContent = 'No run selected. Create a run first.';
-            return;
-        }
-        if (!questionText) {
-            modalStatus.textContent = 'Question text is required.';
-            return;
-        }
-
-        const { lat, lng } = activeTempMarker.getLatLng();
-
-        try {
-            // 1) Create flag
-            const flagPayload = {
-                run_id: runId,
-                flag_number: 1,
-                flag_lat: lat,
-                flag_long: lng,
-            };
-
-            let headers = getAuthHeaders();
-            const flagRes = await fetch('/api/flags', {
-                method: 'POST',
-                headers,
-                body: JSON.stringify(flagPayload),
-            });
-
-            if (!flagRes.ok) {
-                const txt = await flagRes.text();
-                modalStatus.textContent = `Flag create failed: ${flagRes.status}`;
-                console.error('Flag create failed', flagRes.status, txt);
-                return;
-            }
-            const flagJson = await flagRes.json();
-            const flag = flagJson.flag || flagJson; // bulk endpoints return raw array; store returns {flag}
-            const flagId = flag.flag_id;
-
-            // 2) Create question pointing to the created flag
-            const questionPayload = {
-                run_id: runId,
-                flag_id: flagId,
-                question_type: 1, // default type id; adjust if needed
-                question_text: questionText,
-            };
-
-            const qRes = await fetch('/api/questions', {
-                method: 'POST',
-                headers,
-                body: JSON.stringify(questionPayload),
-            });
-
-            if (!qRes.ok) {
-                const txt = await qRes.text();
-                modalStatus.textContent = `Question create failed: ${qRes.status}`;
-                console.error('Question create failed', qRes.status, txt);
-                return;
-            }
-
-            // success: add permanent marker
-            const permanentMarker = L.marker([lat, lng]).addTo(map);
-            permanentMarker.bindPopup(`<strong>${escapeHtml(questionText)}</strong>`);
-            savedMarkers.set(flagId, permanentMarker);
-
-            // cleanup
-            map.removeLayer(activeTempMarker);
-            activeTempMarker = null;
-            modalRunInput.value = '';
-            modalQuestionInput.value = '';
-            modalStatus.textContent = 'Saved.';
-            setTimeout(() => hideModal(), 700);
-            // reload pins to reflect latest server state
-            loadPins();
-        } catch (err) {
-            console.error(err);
-            modalStatus.textContent = 'Save failed (see console)';
-        }
-    });
-
-    // Small utility
-    function escapeHtml(s) {
-        if (!s) return '';
-        return s.replace(/[&"'<>]/g, (c) => ({
-            '&':'&amp;', '"':'&quot;', "'":"&#39;", '<':'&lt;', '>':'&gt;'
-        })[c]);
-    }
-
-    // Initial load
-    // Load run types first to populate the dropdown, then load pins
+    // --- Initial load ---
     loadRunTypes().finally(() => loadPins());
 
-    // expose a reload helper on window for convenience
+    // --- Optional: expose reload function ---
     window.reloadMapPins = loadPins;
 });

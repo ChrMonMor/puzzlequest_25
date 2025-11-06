@@ -20,7 +20,7 @@ class FlagController extends Controller
     public function index(Request $request)
     {
         try {
-            $query = Flag::with('run','questions');
+            $query = Flag::query();
             if ($request->has('run_id')) $query->where('run_id',$request->run_id);
             $flags = $query->get();
             return response()->json($flags, 200);

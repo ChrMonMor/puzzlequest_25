@@ -48,10 +48,7 @@ class AuthController extends Controller
         // Cache the registration data for 1 hour
         cache()->put($cacheKey, $cachePayload, 3600);
 
-    // Point the verification link at the web route; the Web controller will call
-    // the API endpoint and render a friendly page. This keeps AuthController
-    // purely API/JSON.
-    $verifyUrl = url('/verify-email') . '?email=' . urlencode($validated['email']) . '&token=' . urlencode($rawToken);
+        $verifyUrl = url('/verify-email') . '?email=' . urlencode($validated['email']) . '&token=' . urlencode($rawToken);
 
         Mail::raw("Click to verify your email: $verifyUrl", function ($message) use ($validated) {
             $message->to($validated['email'])
@@ -138,7 +135,7 @@ class AuthController extends Controller
             'message' => 'Login successful',
             'token'   => $token,
             'token_type' => 'bearer',
-            'expires_in' => (int) JWTAuth::factory()->getTTL() * 60
+            'expires_in' => (int) JWTAuth::factory()->getTTL() * 60 * 24
         ]);
 
     }
