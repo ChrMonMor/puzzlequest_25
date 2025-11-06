@@ -7,6 +7,7 @@ use App\Models\Run;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Support\Facades\DB;
 use Exception;
 
 class FlagController extends Controller
@@ -20,7 +21,8 @@ class FlagController extends Controller
     public function index(Request $request)
     {
         try {
-            $query = Flag::query();
+            // Eager-load related run, questions and their options so consumers (edit UI) get full data
+            $query = Flag::with(['run','questions.options']);
             if ($request->has('run_id')) $query->where('run_id',$request->run_id);
             $flags = $query->get();
             return response()->json($flags, 200);
@@ -46,19 +48,33 @@ class FlagController extends Controller
         try {
             $validator = Validator::make($request->all(), [
                 'run_id'=>'required|exists:runs,run_id',
-                'flag_number'=>'required|integer',
                 'flag_lat'=>'required|numeric',
                 'flag_long'=>'required|numeric',
             ]);
             if ($validator->fails()) return response()->json(['errors'=>$validator->errors()],422);
-
             $run = Run::findOrFail($request->run_id);
             $user = auth('api')->user();
             if (!$user) return response()->json(['error'=>'Unauthorized. Please log in.'], 401);
             if ($user->user_id !== $run->user_id) return response()->json(['error'=>'Unauthorized'], 403);
 
-            $flag = Flag::create($request->only(['run_id','flag_number','flag_lat','flag_long']));
-            $flag->load('run','questions');
+            // Assign flag_number server-side atomically to avoid races
+            $flag = DB::transaction(function () use ($request, $run) {
+                // To support Postgres (which disallows FOR UPDATE with aggregates),
+                // lock the last row ordered by flag_number and compute the next value.
+                $last = Flag::where('run_id', $run->run_id)->orderBy('flag_number', 'desc')->lockForUpdate()->first();
+                $next = $last ? ($last->flag_number + 1) : 1;
+
+                $data = [
+                    'run_id' => $run->run_id,
+                    'flag_number' => $next,
+                    'flag_lat' => $request->input('flag_lat'),
+                    'flag_long' => $request->input('flag_long'),
+                ];
+
+                $f = Flag::create($data);
+                $f->load('run','questions.options');
+                return $f;
+            });
 
             return response()->json(['message'=>'Flag created','flag'=>$flag], 201);
         } catch (Exception $e) {
@@ -123,21 +139,39 @@ class FlagController extends Controller
             }
 
             $created = [];
-            foreach ($flagsData as $data) {
-                $validator = Validator::make($data, [
-                    'flag_number' => 'required|integer',
-                    'flag_lat' => 'required|numeric',
-                    'flag_long' => 'required|numeric',
-                ]);
-                if ($validator->fails()) continue;
 
-                // enforce run id from the URL
-                $data['run_id'] = $runId;
+            // Create all flags in a transaction and assign sequential flag_numbers atomically
+            $created = DB::transaction(function () use ($flagsData, $runId) {
+                // Lock the last row for this run and compute the starting flag_number.
+                // Avoid using aggregate with FOR UPDATE on Postgres by selecting the last
+                // row ordered by flag_number and locking it.
+                $last = Flag::where('run_id', $runId)->orderBy('flag_number', 'desc')->lockForUpdate()->first();
+                $next = $last ? ($last->flag_number + 1) : 1;
 
-                $flag = Flag::create($data);
-                $flag->load('run', 'questions');
-                $created[] = $flag;
-            }
+                $out = [];
+                foreach ($flagsData as $data) {
+                    // Validate minimal required fields
+                    $validator = Validator::make($data, [
+                        'flag_lat' => 'required|numeric',
+                        'flag_long' => 'required|numeric',
+                    ]);
+                    if ($validator->fails()) continue;
+
+                    // enforce run id from the URL and assign server flag_number
+                    $payload = [
+                        'run_id' => $runId,
+                        'flag_number' => $next++,
+                        'flag_lat' => $data['flag_lat'],
+                        'flag_long' => $data['flag_long'],
+                    ];
+
+                    $flag = Flag::create($payload);
+                    $flag->load('run', 'questions.options');
+                    $out[] = $flag;
+                }
+
+                return $out;
+            });
 
             // Return the created flags as a top-level JSON array (tests expect an array)
             return response()->json($created, 201);
@@ -168,7 +202,7 @@ class FlagController extends Controller
 
                 // Only allow updatable fields
                 $flag->update(array_intersect_key($data, array_flip(['flag_number','flag_lat','flag_long'])));
-                $flag->load('run', 'questions');
+                $flag->load('run', 'questions.options');
                 $updated[] = $flag;
             }
 

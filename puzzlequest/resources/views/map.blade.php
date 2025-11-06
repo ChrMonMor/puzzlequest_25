@@ -18,6 +18,7 @@
 
     <div class="mb-4 p-4 bg-white rounded shadow-sm">
         <h3 class="font-semibold">Create a Run</h3>
+
         <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mt-2">
             <div class="md:col-span-2">
                 <label class="block text-sm font-medium text-gray-700">Run Title</label>
@@ -38,7 +39,7 @@
         </div>
 
         <div class="mt-3 flex items-center gap-3">
-            <button id="create-run" class="px-4 py-2 bg-green-600 text-white rounded">Create Run</button>
+            {{-- Create Run button removed; Save All will create the run if needed --}}
             <span id="create-run-status" class="text-sm text-gray-600"></span>
             <div id="current-run" class="ml-auto text-sm text-gray-700"></div>
         </div>
@@ -62,9 +63,15 @@
             </select>
 
             <!-- Questions container -->
+            <div class="mb-3">
+                <label class="block text-sm font-medium">Default question type</label>
+                <select id="global-question-type" class="w-full border-gray-300 rounded-md p-2 mb-2">
+                    <option value="">Loading...</option>
+                </select>
+            </div>
             <div id="questions-container" class="w-1/3 ml-4 overflow-y-auto max-h-[70vh]"></div>
 
-            <button id="add-question" class="mt-2 px-3 py-1 bg-green-600 text-white rounded">+ Add Question</button>
+            {{-- Individual Add Question button removed — questions are attached to pins when created. --}}
             <button id="save-questions" class="mt-2 ml-2 px-3 py-1 bg-blue-600 text-white rounded">Save All</button>
         </div>
     </div>
@@ -75,12 +82,7 @@
     <script>
         window.__SERVER_JWT = @json(session('jwt_token'));
     </script>
-    @php $viteManifest = public_path('build/manifest.json'); @endphp
-    @if(file_exists($viteManifest))
-        @vite(['resources/js/map.js'])
-    @else
-        {{-- Fallback: use a plain JS build shipped to public/js/map.js (module) --}}
-        <script type="module" src="{{ asset('js/map.js') }}"></script>
-    @endif
+    {{-- Load the bundled map script from public/js — Vite/mix builds are not used for this page. --}}
+    <script type="module" src="{{ asset('js/map.js') }}"></script>
 
 @endsection

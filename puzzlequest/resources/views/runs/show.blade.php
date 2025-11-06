@@ -24,4 +24,76 @@
         <strong>Questions:</strong> {{ $run->questions ? $run->questions->count() : 0 }}
     </div>
 
+    {{-- Map of flags for this run --}}
+    @section('head')
+        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+        <style>
+            #run-map { height: 60vh; border-radius: .5rem; margin-top: 1rem; }
+        </style>
+    @endsection
+
+    <div id="run-map"></div>
+
+    @section('scripts')
+        {{-- Leaflet JS (CDN) -- ensure L is available before our inline script --}}
+        <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+        <script>
+            (function(){
+                function getAuthHeaders(){
+                    const headers = { 'Content-Type': 'application/json' };
+                    const token = sessionStorage.getItem('jwt') || localStorage.getItem('jwt') || (window.__SERVER_JWT || null);
+                    if (token) headers['Authorization'] = `Bearer ${token}`;
+                    return headers;
+                }
+
+                // escape helper
+                function escapeText(s){ if (s === null || s === undefined) return ''; return String(s); }
+
+                const mapEl = document.getElementById('run-map');
+                if (!mapEl) return;
+                const map = L.map(mapEl).setView([51.505, -0.09], 13);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    maxZoom: 19,
+                    attribution: '&copy; OpenStreetMap contributors'
+                }).addTo(map);
+
+                // Fetch flags for this run and plot
+                async function loadRunFlags(){
+                    try{
+                        const res = await fetch('/api/flags?run_id=' + encodeURIComponent('{{ $run->run_id }}'), { headers: getAuthHeaders() });
+                        if (!res.ok) {
+                            console.error('Failed to load flags', res.status);
+                            return;
+                        }
+                        const flags = await res.json();
+                        if (!Array.isArray(flags)) return;
+
+                        const bounds = [];
+                        flags.forEach(f => {
+                            if (!f.flag_lat || !f.flag_long) return;
+                            const lat = parseFloat(f.flag_lat);
+                            const lng = parseFloat(f.flag_long);
+                            bounds.push([lat, lng]);
+                            const marker = L.marker([lat, lng]).addTo(map);
+                            const question = (f.questions && f.questions.length) ? f.questions[0] : null;
+                            const title = question ? escapeText(question.question_text) : ('Flag #' + (f.flag_number || f.flag_id));
+                            marker.bindPopup('<strong>' + title + '</strong>');
+                        });
+                        if (bounds.length) {
+                            try {
+                                const latLngBounds = L.latLngBounds(bounds);
+                                map.fitBounds(latLngBounds, { padding: [50, 50] });
+                            } catch (e) {
+                                // fallback to default view
+                                map.setView([51.505, -0.09], 13);
+                            }
+                        }
+                    } catch(e){ console.error('Error loading flags', e); }
+                }
+
+                loadRunFlags();
+            })();
+        </script>
+    @endsection
+
 @endsection
