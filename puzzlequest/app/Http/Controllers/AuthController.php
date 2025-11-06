@@ -19,7 +19,6 @@ class AuthController extends Controller
 {
     public function register(Request $request)
     {
-        
         $validator = Validator::make($request->all(), [
             'email' => 'required|email|unique:users,user_email',
             'password' => 'required|min:6',
@@ -35,28 +34,31 @@ class AuthController extends Controller
 
         $validated = $validator->validated();
 
-        $user = User::create([
-            'user_email'    => $validated['email'],
-            'user_password' => Hash::make($validated['password']),
-            'user_name' => $validated['username'],
-            'user_verified' => false,
-            'user_img'      => null, // optional default
-        ]);
+        $rawToken = Str::random(60);
+        $hashedToken = Hash::make($rawToken);
 
-        // Send verification email
-        $token = Str::random(60);
-        $hashedToken = Hash::make($token);
+        $cacheKey = 'verify_' . $validated['email'];
+        $cachePayload = [
+            'hashed_token' => $hashedToken,
+            'username' => $validated['username'],
+            'password_hash' => Hash::make($validated['password']),
+            'email' => $validated['email'],
+        ];
 
-        $verifyUrl = url("/api/verify-email?email={$user->user_email}&token={$hashedToken}");
+        // Cache the registration data for 1 hour
+        cache()->put($cacheKey, $cachePayload, 3600);
 
-        cache()->put('verify_' . $user->user_email, $hashedToken, 3600); // valid for 1 hour
+    // Point the verification link at the web route; the Web controller will call
+    // the API endpoint and render a friendly page. This keeps AuthController
+    // purely API/JSON.
+    $verifyUrl = url('/verify-email') . '?email=' . urlencode($validated['email']) . '&token=' . urlencode($rawToken);
 
-        Mail::raw("Click to verify your email: $verifyUrl", function ($message) use ($user) {
-            $message->to($user->user_email)
+        Mail::raw("Click to verify your email: $verifyUrl", function ($message) use ($validated) {
+            $message->to($validated['email'])
                     ->subject('Verify your email address');
         });
 
-        return response()->json(['message' => 'User created, please verify email.']);
+        return response()->json(['message' => 'Registration received, please check your email to verify.']);
     }
 
     public function verifyEmail(Request $request)
@@ -64,20 +66,38 @@ class AuthController extends Controller
         $email = $request->query('email');
         $token = $request->query('token');
 
-        $cachedToken = cache()->get('verify_' . $email);
+        $cacheKey = 'verify_' . $email;
+        $cached = cache()->get($cacheKey);
 
-        if (!$cachedToken || $cachedToken !== $token) {
+        if (!$cached || empty($cached['hashed_token'])) {
             return response()->json(['message' => 'Invalid or expired token'], 400);
         }
 
-        $user = User::where('user_email', $email)->firstOrFail();
-        $user->user_verified = true;
-        $user->user_email_verified_at = now();
-        $user->save();
+        // Validate the raw token against the hashed token stored in cache
+        if (!Hash::check($token, $cached['hashed_token'])) {
+            return response()->json(['message' => 'Invalid or expired token'], 400);
+        }
 
-        cache()->forget('verify_' . $email);
+        // If the user already exists, just mark verified. Otherwise create them
+        $user = User::where('user_email', $email)->first();
+        if (!$user) {
+            $user = User::create([
+                'user_email' => $cached['email'],
+                'user_password' => $cached['password_hash'],
+                'user_name' => $cached['username'],
+                'user_verified' => true,
+                'user_img' => null,
+                'user_email_verified_at' => now(),
+            ]);
+        } else {
+            $user->user_verified = true;
+            $user->user_email_verified_at = now();
+            $user->save();
+        }
 
-        return response()->json(['message' => 'Email verified successfully']);
+        cache()->forget($cacheKey);
+
+        return response()->json(['message' => 'Email verified and account created successfully']);
     }
 
     public function login(Request $request)

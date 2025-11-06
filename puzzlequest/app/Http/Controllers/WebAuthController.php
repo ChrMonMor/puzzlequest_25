@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Http;
 use App\Models\User;
 use Tymon\JWTAuth\Facades\JWTAuth;
+use Illuminate\Http\Request as HttpRequest;
 
 class WebAuthController extends Controller
 {
@@ -24,74 +25,49 @@ class WebAuthController extends Controller
 
     public function login(Request $request)
     {
-        // 🔒 Validate the request
+        // Validate input
         $request->validate([
             'email' => 'required|email',
             'password' => 'required|string|min:6',
         ]);
 
-        $credentials = [
-            'user_email' => $request->input('email'),
-            'password'   => $request->input('password'),
-        ];
-
-        // 🧠 Try to authenticate using JWTAuth
-        if ($token = Auth::attempt($credentials)) {
-            // Store JWT in session (optional)
-            session(['jwt_token' => $token]);
-
-            $user = Auth::user();
-            $request->session()->regenerate();
-
-            return redirect('/')->with('success', 'Logged in successfully');
-        }
-
-        // 🚨 If JWT attempt failed, try fallback API (if you have external API)
+        // Call internal API login endpoint
         try {
-            $response = Http::acceptJson()
-                ->timeout(10)
-                ->post(config('services.api.base_url') . '/login', [
-                    'email' => $request->input('email'),
-                    'password' => $request->input('password'),
-                ]);
+            $sym = HttpRequest::create('/api/login', 'POST', [
+                'email' => $request->input('email'),
+                'password' => $request->input('password'),
+            ], [], [], ['HTTP_ACCEPT' => 'application/json']);
 
-            if ($response->successful()) {
-                $data = $response->json();
-                $token = $data['token'] ?? $data['access_token'] ?? null;
+            $symResponse = app()->handle($sym);
+            $status = $symResponse->getStatusCode();
+            $body = json_decode($symResponse->getContent(), true) ?: [];
 
+            if ($status >= 200 && $status < 300) {
+                $token = $body['token'] ?? $body['access_token'] ?? $body['token_type'] ?? ($body['access_token'] ?? null);
+                // prefer 'token' or 'access_token'
+                $token = $body['token'] ?? ($body['access_token'] ?? null);
                 if ($token) {
                     session(['jwt_token' => $token]);
+                    // try to resolve user from token and log into web guard
+                    try {
+                        $user = JWTAuth::setToken($token)->toUser();
+                        if ($user) {
+                            Auth::login($user);
+                            $request->session()->regenerate();
+                        }
+                    } catch (\Throwable $e) {
+                        // ignore
+                    }
                 }
 
-                // Optionally fetch user info from API
-                $me = Http::acceptJson()
-                    ->withToken($token)
-                    ->get(config('services.api.base_url') . '/user')
-                    ->json();
-
-                if (!empty($me['user_email'])) {
-                    $user = User::firstOrCreate(
-                        ['user_email' => $me['user_email']],
-                        [
-                            'name' => $me['name'] ?? '',
-                            'password' => Hash::make(str()->random(16)),
-                        ]
-                    );
-
-                    Auth::login($user);
-                    $request->session()->regenerate();
-
-                    return redirect('/')->with('success', 'Logged in via API');
-                }
-
-                return redirect('/')->with('success', 'Logged in (JWT stored)');
+                return redirect()->to($request->getSchemeAndHttpHost() . '/')->with('success', $body['message'] ?? 'Logged in');
             }
 
-            if ($response->status() === 401) {
-                return back()->withErrors(['error' => 'Invalid credentials']);
+            if ($status === 401) {
+                return back()->withErrors(['error' => $body['error'] ?? 'Invalid credentials']);
             }
 
-            return back()->withErrors(['error' => 'Login failed: ' . $response->status()]);
+            return back()->withErrors(['error' => $body['message'] ?? 'Login failed']);
         } catch (\Exception $e) {
             return back()->withErrors(['error' => 'Login request failed: ' . $e->getMessage()]);
         }
@@ -101,34 +77,61 @@ class WebAuthController extends Controller
         return view('auth.register');
     }
 
+    /**
+     * Web-friendly verify endpoint: accepts email+token, calls API verify endpoint,
+     * and renders a friendly view on success/failure.
+     */
+    public function verifyEmail(Request $request)
+    {
+        $email = $request->query('email');
+        $token = $request->query('token');
+
+        $sym = HttpRequest::create('/api/verify-email', 'GET', ['email' => $email, 'token' => $token], [], [], ['HTTP_ACCEPT' => 'application/json']);
+        $symResponse = app()->handle($sym);
+        $status = $symResponse->getStatusCode();
+        $body = json_decode($symResponse->getContent(), true) ?: [];
+
+        if ($status >= 200 && $status < 300) {
+            return view('auth.verified', ['message' => $body['message'] ?? 'Email verified successfully']);
+        }
+
+        return view('auth.verify_failed', ['message' => $body['message'] ?? 'Verification failed']);
+    }
+
     public function register(Request $request)
     {
-        // 🧾 Validate the request
+        // Validate input
         $request->validate([
             'username' => 'required|string|max:255',
             'email' => 'required|email|unique:users,user_email',
             'password' => 'required|string|min:6|confirmed',
         ]);
 
-        // 🧠 Create the user directly (no internal /api/register call)
-        $user = User::create([
-            'user_name'  => $request->username,
-            'user_email' => $request->email,
-            'user_password'   => Hash::make($request->password),
-        ]);
+        // Call internal API register endpoint (AuthController handles actual creation after email verification)
+        try {
+            $sym = HttpRequest::create('/api/register', 'POST', [
+                'username' => $request->input('username'),
+                'email' => $request->input('email'),
+                'password' => $request->input('password'),
+            ], [], [], ['HTTP_ACCEPT' => 'application/json']);
 
-        // 🔐 Optionally issue a JWT right after registration
-        $token = JWTAuth::fromUser($user);
+            $symResponse = app()->handle($sym);
+            $status = $symResponse->getStatusCode();
+            $body = json_decode($symResponse->getContent(), true) ?: [];
 
-        // Store token in session (optional if you use web guards)
-        session(['jwt_token' => $token]);
+            if ($status >= 200 && $status < 300) {
+                // Registration accepted — user must verify email
+                return redirect()->to($request->getSchemeAndHttpHost() . '/')->with('success', $body['message'] ?? 'Registration received; please check your email to verify.');
+            }
 
-        // 🔁 Automatically log the user in (optional)
-        Auth::login($user);
-        $request->session()->regenerate();
+            if ($status === 422) {
+                return back()->withErrors($body['errors'] ?? ['error' => 'Validation failed'])->withInput();
+            }
 
-        return redirect('/')
-            ->with('success', 'Account created successfully! You are now logged in.');
+            return back()->withErrors(['error' => $body['message'] ?? 'Registration failed'])->withInput();
+        } catch (\Exception $e) {
+            return back()->withErrors(['error' => 'Registration request failed: ' . $e->getMessage()])->withInput();
+        }
     }
 
     public function logout(Request $request)
@@ -149,7 +152,7 @@ class WebAuthController extends Controller
         Auth::logout();
         $request->session()->invalidate();
         $request->session()->regenerateToken();
-        return redirect('/')->with('success', 'Logged out');
+        return redirect()->to($request->getSchemeAndHttpHost() . '/')->with('success', 'Logged out');
     }
 
     public function createGuest(Request $request)
@@ -173,7 +176,7 @@ class WebAuthController extends Controller
 
         $request->session()->put('guest', $guest);
 
-        return redirect('/')->with('success', 'Continuing as guest');
+        return redirect()->to($request->getSchemeAndHttpHost() . '/')->with('success', 'Continuing as guest');
     }
 
     public function showUpgrade()
@@ -232,12 +235,12 @@ class WebAuthController extends Controller
                 }
 
                 session()->forget('guest');
-                return redirect('/')->with('success', $body['message'] ?? 'Account created');
+                return redirect()->to($request->getSchemeAndHttpHost() . '/')->with('success', $body['message'] ?? 'Account created');
             }
 
             // If no local user found after creation, fall back to the login route
-            session()->forget('guest');
-            return redirect()->route('login')->with('success', $body['message'] ?? 'Account created, please verify email.');
+                session()->forget('guest');
+                return redirect()->route('login')->with('success', $body['message'] ?? 'Account created, please verify email.');
         }
 
         if ($status === 422) {
@@ -253,6 +256,6 @@ class WebAuthController extends Controller
             $request->session()->forget('guest');
         }
 
-        return redirect('/')->with('success', 'Guest session ended');
+        return redirect()->to($request->getSchemeAndHttpHost() . '/')->with('success', 'Guest session ended');
     }
 }

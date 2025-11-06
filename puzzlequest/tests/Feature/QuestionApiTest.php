@@ -8,6 +8,7 @@ use App\Models\Run;
 use App\Models\Flag;
 use App\Models\Question;
 use App\Models\QuestionType;
+use App\models\QuestionOption;
 use Tymon\JWTAuth\Facades\JWTAuth;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use PHPUnit\Framework\Attributes\Test;
@@ -22,6 +23,7 @@ class QuestionApiTest extends ApiTestCase
     protected ?Run $run = null;
     protected ?Flag $flag = null;
     protected ?QuestionType $questionType = null;
+    protected ?QuestionOption $questionOption = null;
     protected $withoutMiddleware = true;
 
 
@@ -52,10 +54,19 @@ class QuestionApiTest extends ApiTestCase
             'flag_id' => $this->flag->flag_id,
             'question_type' => $this->questionType->question_type_id,
             'question_text' => 'What is 2 + 2?',
-            'question_answer' => '4',
         ];
+        
 
         $response = $this->withToken($this->token)->postJson('/api/questions', $payload);
+
+        $this->questionOption = QuestionOption::factory()->create([
+            'question_id' => $response->json('question.question_id'),
+            'question_option_text' => '4',
+        ]);
+
+         $payload['question_answer'] = $this->questionOption->question_option_id;
+
+         $response = $this->withToken($this->token)->postJson('/api/questions', $payload);
 
         $response->assertStatus(201)
                  ->assertJsonStructure([
@@ -72,7 +83,7 @@ class QuestionApiTest extends ApiTestCase
 
         $this->assertDatabaseHas('questions', [
             'question_text' => 'What is 2 + 2?',
-            'question_answer' => '4',
+            'question_answer' => $this->questionOption->question_option_id,
         ]);
     }
     /** @test */

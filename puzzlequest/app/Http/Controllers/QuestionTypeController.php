@@ -17,7 +17,7 @@ class QuestionTypeController extends Controller
     public function index()
     {
         try {
-            $questionTypes = QuestionType::with('questions')->get();
+            $questionTypes = QuestionType::all();
             return response()->json($questionTypes,200);
         } catch (Exception $e) {
             return response()->json(['error'=>'Failed to fetch question types','details'=>$e->getMessage()],500);
@@ -27,7 +27,7 @@ class QuestionTypeController extends Controller
     public function show($id)
     {
         try {
-            $questionType = QuestionType::with('questions')->findOrFail($id);
+            $questionType = QuestionType::findOrFail($id);
             return response()->json($questionType,200);
         } catch (Exception $e) {
             return response()->json(['error'=>'Question type not found','details'=>$e->getMessage()],404);

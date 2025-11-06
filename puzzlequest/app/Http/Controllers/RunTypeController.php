@@ -17,7 +17,7 @@ class RunTypeController extends Controller
     public function index()
     {
         try {
-            $runTypes = RunType::with('runs')->get();
+            $runTypes = RunType::all();
             return response()->json($runTypes,200);
         } catch (Exception $e) {
             return response()->json(['error'=>'Failed to fetch run types','details'=>$e->getMessage()],500);
@@ -27,7 +27,7 @@ class RunTypeController extends Controller
     public function show($id)
     {
         try {
-            $runType = RunType::with('runs')->findOrFail($id);
+            $runType = RunType::findOrFail($id);
             return response()->json($runType,200);
         } catch (Exception $e) {
             return response()->json(['error'=>'Run type not found','details'=>$e->getMessage()],404);
