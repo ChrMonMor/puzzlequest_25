@@ -55,6 +55,7 @@
                             $historyFlagPoints[] = [
                                 'lat' => (float) $hf->history_flag_lat,
                                 'lng' => (float) $hf->history_flag_long,
+                                'history_id' => $h->history_id,
                                 'player' => $h->user->user_name ?? $h->user->name ?? 'Guest',
                                 'reached' => $hf->history_flag_reached,
                                 'point' => $hf->history_flag_point,
@@ -166,15 +167,34 @@
                         } catch (e) {}
                     });
 
+                    const params = new URLSearchParams(window.location.search);
+                    const focusHistory = params.get('focusHistory');
+                    const focusBounds = [];
+
                     historyPts.forEach(p => {
                         try {
                             const lat = parseFloat(p.lat); const lng = parseFloat(p.lng);
                             if (isNaN(lat) || isNaN(lng)) return;
                             allBounds.push([lat, lng]);
-                            const cm = L.circleMarker([lat, lng], { radius: 6, color: '#2ecc71', fillColor: '#2ecc71', fillOpacity: 0.9 }).addTo(map);
-                            cm.bindPopup(`<strong>${escapeHtml(p.player)}</strong><br/>Reached: ${escapeHtml(p.reached || '')}<br/>Points: ${escapeHtml(String(p.point || ''))}`);
+
+                            const isFocus = focusHistory && String(p.history_id) === String(focusHistory);
+                            if (isFocus) {
+                                focusBounds.push([lat, lng]);
+                                const cm = L.circleMarker([lat, lng], { radius: 8, color: '#ff8c00', fillColor: '#ff8c00', fillOpacity: 1 }).addTo(map);
+                                cm.bindPopup(`<strong>${escapeHtml(p.player)}</strong><br/>Reached: ${escapeHtml(p.reached || '')}<br/>Points: ${escapeHtml(String(p.point || ''))}`).openPopup();
+                            } else {
+                                const cm = L.circleMarker([lat, lng], { radius: 6, color: '#2ecc71', fillColor: '#2ecc71', fillOpacity: 0.9 }).addTo(map);
+                                cm.bindPopup(`<strong>${escapeHtml(p.player)}</strong><br/>Reached: ${escapeHtml(p.reached || '')}<br/>Points: ${escapeHtml(String(p.point || ''))}`);
+                            }
                         } catch (e) {}
                     });
+
+                    // if focusing on a history, fit to its points; otherwise fit all
+                    if (focusBounds.length) {
+                        try { map.fitBounds(L.latLngBounds(focusBounds), { padding: [40,40] }); } catch (e) { /* fallback below */ }
+                    } else if (allBounds.length) {
+                        try { map.fitBounds(L.latLngBounds(allBounds), { padding: [40,40] }); } catch (e) { map.setView([51.505, -0.09], 13); }
+                    }
 
                     if (allBounds.length) {
                         try { map.fitBounds(L.latLngBounds(allBounds), { padding: [40,40] }); } catch (e) { map.setView([51.505, -0.09], 13); }
