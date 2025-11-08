@@ -5,20 +5,46 @@
 @section('content')
     <h2 class="text-xl font-semibold">Statistics for {{ $run->run_title ?? '(untitled)' }}</h2>
 
-    <div class="mt-4 p-3 border rounded bg-gray-50">
-        <div><strong>Total plays:</strong> {{ $totalHistories }}</div>
-        <div><strong>Completed plays:</strong> {{ $completedHistories }}</div>
-        <div><strong>Unique players:</strong> {{ $uniquePlayers }}</div>
-        <div><strong>Total flags reached:</strong> {{ $totalReached }}</div>
-        <div><strong>Total points across plays:</strong> {{ $totalPoints }}</div>
-        <div><strong>Completion (overall):</strong> {{ $completionPercent }}%</div>
-        <div><strong>Average points per play:</strong> {{ $averagePoints }}</div>
-        <div><strong>Average duration:</strong>
-            @if($avgDurationSeconds)
-                {{ gmdate('H:i:s', $avgDurationSeconds) }} (hh:mm:ss)
-            @else
-                -
-            @endif
+    <div class="card" style="margin-top:1rem; display:flex; gap:1rem; flex-wrap:wrap; align-items:flex-start">
+        <div style="flex:1; min-width:260px">
+            <h3 style="margin:0 0 .5rem 0">Overview</h3>
+            <div style="line-height:1.6">
+                <div><strong>Total plays:</strong> {{ $totalHistories }}</div>
+                <div><strong>Completed plays:</strong> {{ $completedHistories }}</div>
+                <div><strong>Unique players:</strong> {{ $uniquePlayers }}</div>
+                <div><strong>Total flags reached:</strong> {{ $totalReached }}</div>
+                <div><strong>Total points across plays:</strong> {{ $totalPoints }}</div>
+                <div><strong>Completion (overall):</strong> {{ $completionPercent }}%</div>
+                <div><strong>Average points per play:</strong> {{ $averagePoints }}</div>
+                <div><strong>Average duration:</strong>
+                    @if($avgDurationSeconds)
+                        {{ gmdate('H:i:s', $avgDurationSeconds) }} (hh:mm:ss)
+                    @else
+                        -
+                    @endif
+                </div>
+            </div>
+        </div>
+
+        <div style="flex:2; min-width:320px">
+            <h3 style="margin:0 0 .5rem 0">Visuals</h3>
+            <div style="display:flex; gap:1rem; flex-wrap:wrap">
+                <div style="flex:1 1 32%; min-width:180px; height:200px;">
+                    <div class="card" style="height:100%; padding:.5rem">
+                        <canvas id="pointsChart" style="height:100%"></canvas>
+                    </div>
+                </div>
+                <div style="flex:1 1 32%; min-width:180px; height:200px;">
+                    <div class="card" style="height:100%; padding:.5rem">
+                        <canvas id="reachedChart" style="height:100%"></canvas>
+                    </div>
+                </div>
+                <div style="flex:1 1 32%; min-width:180px; height:200px;">
+                    <div class="card" style="height:100%; padding:.5rem">
+                        <canvas id="completionChart" style="height:100%"></canvas>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -30,7 +56,7 @@
         </style>
     @endsection
 
-    <div id="run-stats-map"></div>
+    <div id="run-stats-map" class="card" style="margin-top:1rem; padding:0; overflow:hidden;"></div>
 
     @php
         $canonicalPoints = [];
@@ -69,17 +95,7 @@
 
     <h3 class="mt-6 text-lg">Recent histories</h3>
     @if($histories && $histories->count())
-        <div class="grid grid-cols-3 gap-4 mt-4">
-            <div>
-                <canvas id="pointsChart"></canvas>
-            </div>
-            <div>
-                <canvas id="reachedChart"></canvas>
-            </div>
-            <div>
-                <canvas id="completionChart"></canvas>
-            </div>
-        </div>
+        <div class="card" style="margin-top:1rem; padding:1rem">
 
         @section('scripts')
             <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -202,7 +218,8 @@
                 })();
             </script>
         @endsection
-        <table class="table-auto w-full mt-2">
+        <div style="overflow:auto; margin-top:1rem">
+            <table class="table-auto w-full mt-2">
             <thead>
                 <tr>
                     <th class="px-2 py-1 text-left">Player</th>
@@ -231,7 +248,7 @@
             </tbody>
         </table>
     @else
-        <div class="text-sm text-gray-600">No plays recorded yet for this run.</div>
+        <div class="card muted" style="margin-top:1rem; padding:.75rem">No plays recorded yet for this run.</div>
     @endif
 
 @endsection

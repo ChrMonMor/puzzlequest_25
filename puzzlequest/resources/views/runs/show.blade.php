@@ -3,42 +3,58 @@
 @section('title', $run->run_title ?? 'Run')
 
 @section('content')
-    <h2 class="text-xl font-semibold">{{ $run->run_title ?? '(untitled)' }}</h2>
-    <p class="text-sm text-gray-600">Created: {{ $run->run_added }} | By: {{ $run->user->user_name ?? $run->user->name ?? 'Unknown' }}</p>
+    <div class="card">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:1rem">
+            <div style="flex:1">
+                <h2 class="text-xl font-semibold" style="margin:0">{{ $run->run_title ?? '(untitled)' }}</h2>
+                <div class="muted" style="margin-top:.25rem; font-size:.95rem">Created: {{ $run->run_added }} · By: {{ $run->user->user_name ?? $run->user->name ?? 'Unknown' }}</div>
+            </div>
 
-    <div style="margin-top:1rem">
-        <p>{{ $run->run_description }}</p>
-    </div>
+            <div style="text-align:right">
+                @if(auth()->check() && auth()->user()->user_id === $run->user_id)
+                    {{-- Show pin to owner only --}}
+                    @if(!empty($run->run_pin))
+                        <div class="muted" style="margin-bottom:.5rem">Pin: <strong>{{ $run->run_pin }}</strong></div>
+                    @endif
+                    <div>
+                        <a href="{{ route('runs.edit', $run->run_id) }}" class="btn btn-primary">Edit</a>
+                        <a href="{{ route('stats.run', $run->run_id) }}" class="btn btn-secondary" style="margin-left:.5rem">View stats</a>
+                    </div>
+                @else
+                    <div>
+                        <a href="{{ route('runs.index') }}" class="btn btn-secondary">Back to runs</a>
+                    </div>
+                @endif
+            </div>
+        </div>
 
-    <div style="margin-top:1rem">
-        @if(auth()->check() && auth()->user()->user_id === $run->user_id)
-            <a href="{{ route('runs.edit', $run->run_id) }}">Edit this run</a>
-            <a href="{{ route('stats.run', $run->run_id) }}" style="margin-left:1rem">View run stats</a>
+        @if(!empty($run->run_description))
+            <div style="margin-top:.75rem">{{ $run->run_description }}</div>
         @endif
-        <a href="{{ route('runs.index') }}" style="margin-left:1rem">Back to runs</a>
-    </div>
 
-    {{-- show flags and questions counts --}}
-    <div style="margin-top:1rem">
-        <strong>Flags:</strong> {{ $run->flags ? $run->flags->count() : 0 }}
-        <br>
-        <strong>Questions:</strong> {{ $run->questions ? $run->questions->count() : 0 }}
-    </div>
+        <div style="margin-top:.75rem; display:flex; gap:1.5rem; align-items:center;">
+            <div><strong>Flags:</strong> {{ $run->flags ? $run->flags->count() : 0 }}</div>
+            <div><strong>Questions:</strong> {{ $run->questions ? $run->questions->count() : 0 }}</div>
+            @if(optional($run->runType)->run_type_name)
+                <div class="muted">Type: {{ optional($run->runType)->run_type_name }}</div>
+            @endif
+        </div>
 
-    {{-- Small list of recent user histories for this run --}}
-    <div style="margin-top:1rem">
-        <h3 class="text-lg font-medium">Recent players</h3>
-        @if(!empty($histories) && $histories->count())
-            <ul>
-                @foreach($histories as $h)
-                    <li>
-                        {{ $h->user->user_name ?? $h->user->name ?? 'Guest' }} — started {{ $h->history_start }} @if($h->history_end) (ended {{ $h->history_end }})@endif
-                    </li>
-                @endforeach
-            </ul>
-        @else
-            <div class="text-sm text-gray-600">No recent players recorded for this run.</div>
-        @endif
+        {{-- Small list of recent user histories for this run --}}
+        <div style="margin-top:1rem">
+            <h3 class="text-lg font-medium">Recent players</h3>
+            @if(!empty($histories) && $histories->count())
+                <ul>
+                    @foreach($histories as $h)
+                        <li class="muted" style="margin-bottom:.25rem">
+                            {{ $h->user->user_name ?? $h->user->name ?? 'Guest' }} — started {{ $h->history_start }} @if($h->history_end) (ended {{ $h->history_end }})@endif
+                        </li>
+                    @endforeach
+                </ul>
+            @else
+                <div class="muted">No recent players recorded for this run.</div>
+            @endif
+        </div>
     </div>
 
     {{-- Map of flags for this run --}}
