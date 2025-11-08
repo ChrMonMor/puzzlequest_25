@@ -45,4 +45,12 @@ Route::middleware('auth')->group(function () {
     Route::get('/runs/{id}/edit', [WebRunController::class, 'edit'])->name('runs.edit');
     // My runs listing
     Route::get('/my-runs', [WebRunController::class, 'myRuns'])->name('runs.mine');
+
+    // Stats pages: users' histories
+    Route::get('/stats', [App\Http\Controllers\WebStatsController::class, 'index'])->name('stats.index');
+    Route::get('/stats/{userId}', [App\Http\Controllers\WebStatsController::class, 'show'])->name('stats.show');
+    // Run-level stats (owner-only)
+    Route::get('/runs/{runId}/stats', [App\Http\Controllers\WebStatsController::class, 'run'])->name('stats.run');
+    // View a single history (detailed view for a run play-through)
+    Route::get('/history/{historyId}', [App\Http\Controllers\WebHistoryController::class, 'show'])->name('history.show');
 });

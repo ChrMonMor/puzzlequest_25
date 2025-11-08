@@ -13,6 +13,7 @@
     <div style="margin-top:1rem">
         @if(auth()->check() && auth()->user()->user_id === $run->user_id)
             <a href="{{ route('runs.edit', $run->run_id) }}">Edit this run</a>
+            <a href="{{ route('stats.run', $run->run_id) }}" style="margin-left:1rem">View run stats</a>
         @endif
         <a href="{{ route('runs.index') }}" style="margin-left:1rem">Back to runs</a>
     </div>
@@ -22,6 +23,22 @@
         <strong>Flags:</strong> {{ $run->flags ? $run->flags->count() : 0 }}
         <br>
         <strong>Questions:</strong> {{ $run->questions ? $run->questions->count() : 0 }}
+    </div>
+
+    {{-- Small list of recent user histories for this run --}}
+    <div style="margin-top:1rem">
+        <h3 class="text-lg font-medium">Recent players</h3>
+        @if(!empty($histories) && $histories->count())
+            <ul>
+                @foreach($histories as $h)
+                    <li>
+                        {{ $h->user->user_name ?? $h->user->name ?? 'Guest' }} — started {{ $h->history_start }} @if($h->history_end) (ended {{ $h->history_end }})@endif
+                    </li>
+                @endforeach
+            </ul>
+        @else
+            <div class="text-sm text-gray-600">No recent players recorded for this run.</div>
+        @endif
     </div>
 
     {{-- Map of flags for this run --}}

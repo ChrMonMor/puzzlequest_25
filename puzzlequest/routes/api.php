@@ -67,6 +67,9 @@ Route::prefix('runs')->group(function () {
         Route::put('{id}', [RunController::class, 'update']); // Update run
         Route::delete('{id}', [RunController::class, 'destroy']); // Delete run
 
+    // Generate a unique 6-char alphanumeric pin for a run
+    Route::post('{id}/generate-pin', [RunController::class, 'generatePin']);
+
         // Bulk operations for flags and questions linked to runs
         Route::post('{runId}/flags/bulk', [FlagController::class, 'bulkCreate']);
         Route::put('{runId}/flags/bulk', [FlagController::class, 'bulkUpdate']);

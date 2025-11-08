@@ -22,6 +22,11 @@
             <button id="delete-run" class="px-4 py-2 bg-red-600 text-white rounded">Delete Run</button>
             <a href="{{ route('runs.show', $run->run_id) }}" class="ml-auto text-sm text-gray-600">Cancel</a>
         </div>
+        <div class="mt-2 flex items-center gap-2">
+            <div class="text-sm text-gray-700">Pin: <strong id="run-pin-display">{{ $run->run_pin ?? '(none)' }}</strong></div>
+            <button id="generate-pin" class="px-3 py-1 bg-indigo-600 text-white rounded text-sm">Generate Pin</button>
+            <button id="clear-pin" class="px-2 py-1 bg-gray-200 text-sm rounded">Clear</button>
+        </div>
         <div id="status" class="mt-2 text-sm text-gray-600"></div>
     </div>
 
@@ -102,6 +107,29 @@
 
             document.getElementById('save-run').addEventListener('click', saveRun);
             document.getElementById('delete-run').addEventListener('click', deleteRun);
+            const genBtn = document.getElementById('generate-pin');
+            const pinDisplay = document.getElementById('run-pin-display');
+            const clearPinBtn = document.getElementById('clear-pin');
+            if (genBtn) genBtn.addEventListener('click', async () => {
+                if (!confirm('Generate a new unique 6-character pin for this run?')) return;
+                try{
+                    genBtn.disabled = true; genBtn.textContent = 'Generating...';
+                    const res = await fetch('/api/runs/' + encodeURIComponent(runId) + '/generate-pin', { method: 'POST', headers: getAuthHeaders() });
+                    if (!res.ok) { const txt = await res.text().catch(()=>''); alert('Failed to generate pin: '+res.status+' '+txt); return; }
+                    const j = await res.json();
+                    pinDisplay.textContent = j.pin || (j.run && j.run.run_pin) || '(none)';
+                    alert('Pin generated: ' + pinDisplay.textContent);
+                }catch(e){ console.error(e); alert('Failed to generate pin'); }
+                finally{ genBtn.disabled = false; genBtn.textContent = 'Generate Pin'; }
+            });
+            if (clearPinBtn) clearPinBtn.addEventListener('click', async () => {
+                if (!confirm('Clear the run pin?')) return;
+                try{
+                    const res = await fetch('/api/runs/' + encodeURIComponent(runId), { method: 'PUT', headers: getAuthHeaders(), body: JSON.stringify({ run_pin: null }) });
+                    if (!res.ok) { const txt = await res.text().catch(()=>''); alert('Failed to clear pin: '+res.status+' '+txt); return; }
+                    pinDisplay.textContent = '(none)';
+                }catch(e){ console.error(e); alert('Failed to clear pin'); }
+            });
 
             loadRunTypes();
         })();
@@ -116,6 +144,10 @@
         .option-row { display:flex; gap:8px; align-items:center; margin-bottom:6px }
     </style>
 
+    <div class="mt-2 mb-2">
+        <button id="add-pin-btn" class="px-3 py-1 bg-green-600 text-white rounded">Add Pin</button>
+        <span id="add-pin-hint" class="ml-2 text-sm text-gray-600"></span>
+    </div>
     <div id="edit-map"></div>
     <div id="flag-editor" class="bg-white p-4 rounded shadow-sm">
         <em>Select a pin to edit its question(s) and options.</em>
@@ -136,7 +168,99 @@
             const map = L.map(mapEl).setView([51.505, -0.09], 13);
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom:19 }).addTo(map);
 
+            // question types for dropdowns in the editor
+            let questionTypes = [];
+            async function loadQuestionTypes(){
+                try{
+                    const res = await fetch('/api/question-types/', { headers: getAuthHeaders() });
+                    if (!res.ok) return;
+                    questionTypes = await res.json();
+                }catch(e){ console.error('Failed to load question types', e); }
+            }
+
             let currentMarkers = new Map(); // flag_id => marker
+            let pendingMarkers = new Map(); // tempId => pending flag object
+            let addingPin = false;
+            const addPinBtn = document.getElementById('add-pin-btn');
+            const addPinHint = document.getElementById('add-pin-hint');
+            if (addPinBtn) {
+                addPinBtn.addEventListener('click', () => {
+                    addingPin = !addingPin;
+                    addPinBtn.textContent = addingPin ? 'Click map to place pin — Cancel' : 'Add Pin';
+                    addPinHint.textContent = addingPin ? 'Click anywhere on the map to place a new pin.' : '';
+                    if (addingPin) {
+                        // one-time map click to place new pin
+                        map.once('click', (e) => {
+                            createPendingFlag(e.latlng);
+                            addingPin = false;
+                            addPinBtn.textContent = 'Add Pin';
+                            addPinHint.textContent = '';
+                        });
+                    }
+                });
+            }
+
+            // Helpers for pending flags/questions UI (client-only until saved)
+            function renderPendingQuestionEditor(q, container, pendingFlag){
+                const qBox = document.createElement('div'); qBox.className='mb-3 p-2 border rounded';
+                const qt = document.createElement('textarea'); qt.rows=2; qt.className='w-full'; qt.value = q.question_text || '';
+                // question type select populated from questionTypes
+                const typeSel = document.createElement('select');
+                const emptyOpt3 = document.createElement('option'); emptyOpt3.value=''; emptyOpt3.textContent='Select type'; typeSel.appendChild(emptyOpt3);
+                for (const t of questionTypes){ const o = document.createElement('option'); o.value = t.question_type_id; o.textContent = t.question_type_name || t.name || t.question_type_id; typeSel.appendChild(o); }
+                typeSel.value = q.question_type || '';
+                const delQ = document.createElement('button'); delQ.textContent='Remove Question';
+                qBox.appendChild(qt); qBox.appendChild(document.createElement('br'));
+                qBox.appendChild(document.createTextNode('Type: ')); qBox.appendChild(typeSel); qBox.appendChild(document.createElement('br'));
+
+                const optsDiv = document.createElement('div'); optsDiv.className='mt-2';
+                q.options = q.options || [];
+                q.options.forEach((opt, idx) => {
+                    createPendingOptionRow(opt, q, idx, optsDiv);
+                });
+
+                const newOptInput = document.createElement('input'); newOptInput.type='text'; newOptInput.placeholder='New option text';
+                const addOptBtn = document.createElement('button'); addOptBtn.textContent='Add Option';
+                addOptBtn.addEventListener('click', () => {
+                    const text = newOptInput.value.trim(); if (!text) return alert('Option text required');
+                    const opt = { question_option_text: text };
+                    q.options.push(opt);
+                    createPendingOptionRow(opt, q, q.options.length-1, optsDiv);
+                    newOptInput.value = '';
+                });
+
+                delQ.addEventListener('click', () => {
+                    // remove from pendingFlag.questions
+                    const idx = pendingFlag.questions.indexOf(q);
+                    if (idx !== -1) pendingFlag.questions.splice(idx,1);
+                    qBox.remove();
+                });
+
+                qBox.appendChild(optsDiv);
+                qBox.appendChild(newOptInput); qBox.appendChild(addOptBtn); qBox.appendChild(delQ);
+                container.appendChild(qBox);
+            }
+
+            function createPendingOptionRow(opt, q, idx, container){
+                const row = document.createElement('div'); row.className='option-row';
+                const radio = document.createElement('input'); radio.type='radio'; radio.name = 'pending_answer_' + q._tempId; radio.value = '' + idx;
+                radio.checked = (q.selectedAnswerIndex === idx);
+                radio.addEventListener('change', () => { if (radio.checked) q.selectedAnswerIndex = idx; });
+                const span = document.createElement('span'); span.textContent = opt.question_option_text || '';
+                row.appendChild(radio); row.appendChild(span);
+                container.appendChild(row);
+            }
+
+            function createPendingFlag(latlng){
+                const tempId = 'temp_' + Date.now();
+                const marker = L.marker([latlng.lat, latlng.lng], { draggable: true }).addTo(map);
+                marker.bindPopup('New Flag').openPopup();
+                const pending = { _isPending: true, _tempId: tempId, flag_lat: latlng.lat, flag_long: latlng.lng, questions: [] , marker };
+                marker.on('click', () => openEditorForFlag(pending));
+                marker.on('dragend', () => { const ll = marker.getLatLng(); pending.flag_lat = ll.lat; pending.flag_long = ll.lng; });
+                pendingMarkers.set(tempId, pending);
+                openEditorForFlag(pending);
+            }
 
             async function loadFlags(){
                 try{
@@ -178,6 +302,8 @@
                 // radio indicates which option is the answer for the question
                 const radio = document.createElement('input'); radio.type='radio'; radio.name = 'answer_' + questionId;
                 radio.checked = !!(option.question_option_id && questionAnswer && option.question_option_id === questionAnswer);
+                // ensure radio carries the option id so saves can read the selected id
+                radio.value = option.question_option_id || '';
                 row.appendChild(radio);
 
                 const input = document.createElement('input'); input.type='text'; input.value = option.question_option_text || '';
@@ -232,8 +358,14 @@
                 }
                 for (const q of (flag.questions || [])){
                     const qBox = document.createElement('div'); qBox.className='mb-3 p-2 border rounded';
+                    // mark question id for later selection/highlighting
+                    if (q.question_id) qBox.dataset.questionId = q.question_id;
                     const qt = document.createElement('textarea'); qt.rows=2; qt.className='w-full'; qt.value = q.question_text || '';
-                    const typeSel = document.createElement('input'); typeSel.type='number'; typeSel.value = q.question_type || '';
+                    // type select populated from questionTypes
+                    const typeSel = document.createElement('select');
+                    const emptyOpt = document.createElement('option'); emptyOpt.value=''; emptyOpt.textContent='Select type'; typeSel.appendChild(emptyOpt);
+                    for (const t of questionTypes){ const o = document.createElement('option'); o.value = t.question_type_id; o.textContent = t.question_type_name || t.name || t.question_type_id; typeSel.appendChild(o); }
+                    typeSel.value = q.question_type || '';
                     const saveQ = document.createElement('button'); saveQ.textContent='Save Question';
                     const delQ = document.createElement('button'); delQ.textContent='Delete Question';
                     qBox.appendChild(qt); qBox.appendChild(document.createElement('br'));
@@ -265,7 +397,9 @@
 
                     saveQ.addEventListener('click', async () => {
                         try{
-                            const payload = { question_text: qt.value.trim(), question_type: parseInt(typeSel.value || 0,10) };
+                            // detect selected answer radio for this question and include it in update payload
+                            const selected = document.querySelector(`input[name="answer_${q.question_id}"]:checked`);
+                            const payload = { question_text: qt.value.trim(), question_type: parseInt(typeSel.value || 0,10), question_answer: selected ? selected.value : null };
                             const res = await fetch('/api/questions/' + encodeURIComponent(q.question_id), { method: 'PUT', headers: getAuthHeaders(), body: JSON.stringify(payload) });
                             if (!res.ok) { alert('Failed to save question'); return; }
                             alert('Saved');
@@ -282,6 +416,136 @@
                     });
 
                     qList.appendChild(qBox);
+                }
+
+                // If this is a pending flag, allow adding questions locally and saving the flag+
+                if (flag._isPending) {
+                    const addQbtn = document.createElement('button'); addQbtn.textContent = 'Add Question'; addQbtn.className='mr-2';
+                    addQbtn.addEventListener('click', () => {
+                        const newQ = { _tempId: 'q_' + Date.now(), question_text: '', question_type: null, options: [], selectedAnswerIndex: null };
+                        flag.questions = flag.questions || [];
+                        flag.questions.push(newQ);
+                        renderPendingQuestionEditor(newQ, qList, flag);
+                    });
+
+                    const saveFlagBtn = document.createElement('button'); saveFlagBtn.textContent = 'Save Flag'; saveFlagBtn.className='px-3 py-1 bg-blue-600 text-white rounded';
+                    saveFlagBtn.addEventListener('click', async () => {
+                        // create flag first
+                        try{
+                            const payload = { run_id: runId, flag_lat: flag.flag_lat, flag_long: flag.flag_long };
+                            const res = await fetch('/api/flags', { method: 'POST', headers: getAuthHeaders(), body: JSON.stringify(payload) });
+                            if (!res.ok) { const txt = await res.text().catch(()=>''); return alert('Failed to create flag: '+res.status+' '+txt); }
+                            const json = await res.json();
+                            const createdFlag = json.flag || json;
+
+                            // create questions sequentially for this flag
+                            for (const q of (flag.questions || [])){
+                                const optionsPayload = (q.options || []).map(o => ({ question_option_text: o.question_option_text }));
+                                const qPayload = { run_id: runId, flag_id: createdFlag.flag_id, question_type: parseInt(q.question_type || 0,10), question_text: q.question_text || '' };
+                                if (q.options && q.options.length) qPayload.options = optionsPayload;
+                                const rq = await fetch('/api/questions', { method: 'POST', headers: getAuthHeaders(), body: JSON.stringify(qPayload) });
+                                if (!rq.ok) { console.error('Failed to create question', await rq.text()); continue; }
+                                const qjson = await rq.json();
+                                const createdQ = qjson.question || qjson;
+                                // if the user selected a non-first option as answer, update question_answer
+                                if (typeof q.selectedAnswerIndex === 'number' && q.selectedAnswerIndex > 0 && createdQ.options && createdQ.options.length > q.selectedAnswerIndex) {
+                                    const chosen = createdQ.options[q.selectedAnswerIndex];
+                                    if (chosen && chosen.question_option_id) {
+                                        await fetch('/api/questions/' + encodeURIComponent(createdQ.question_id), { method: 'PUT', headers: getAuthHeaders(), body: JSON.stringify({ question_answer: chosen.question_option_id }) });
+                                    }
+                                }
+                            }
+
+                            // remove pending marker and reload flags
+                            try { flag.marker && map.removeLayer(flag.marker); } catch(e){}
+                            pendingMarkers.delete(flag._tempId);
+                            await loadFlags();
+                            clearEditor();
+                        }catch(e){ console.error(e); alert('Failed to save flag and questions'); }
+                    });
+
+                    const discardBtn = document.createElement('button'); discardBtn.textContent='Discard'; discardBtn.className='ml-2';
+                    discardBtn.addEventListener('click', () => {
+                        if (!confirm('Discard this new pin?')) return;
+                        try { flag.marker && map.removeLayer(flag.marker); } catch(e){}
+                        pendingMarkers.delete(flag._tempId);
+                        clearEditor();
+                    });
+
+                    ed.appendChild(addQbtn);
+                    ed.appendChild(saveFlagBtn);
+                    ed.appendChild(discardBtn);
+                }
+
+                // If this is an existing (saved) flag, allow adding a new question via the API
+                if (!flag._isPending) {
+                    const addQbtn2 = document.createElement('button'); addQbtn2.textContent = 'Add Question'; addQbtn2.className='mr-2';
+                    const newQBox = document.createElement('div'); newQBox.style.marginTop = '8px';
+                    let newQVisible = false;
+
+                    addQbtn2.addEventListener('click', () => {
+                        if (newQVisible) { newQBox.innerHTML = ''; newQVisible = false; addQbtn2.textContent = 'Add Question'; return; }
+                        newQVisible = true; addQbtn2.textContent = 'Cancel';
+
+                        // build inline new question form
+                        const qBox = document.createElement('div'); qBox.className='mb-3 p-2 border rounded';
+                        const qt = document.createElement('textarea'); qt.rows=2; qt.className='w-full'; qt.placeholder='Enter question text';
+                        // question type select populated from questionTypes
+                        const typeSel = document.createElement('select');
+                        const emptyOpt2 = document.createElement('option'); emptyOpt2.value=''; emptyOpt2.textContent='Select type'; typeSel.appendChild(emptyOpt2);
+                        for (const t of questionTypes){ const o = document.createElement('option'); o.value = t.question_type_id; o.textContent = t.question_type_name || t.name || t.question_type_id; typeSel.appendChild(o); }
+                        const optsDiv = document.createElement('div'); optsDiv.className='mt-2';
+                        const newOptInput = document.createElement('input'); newOptInput.type='text'; newOptInput.placeholder='New option text';
+                        const addOptBtn = document.createElement('button'); addOptBtn.textContent='Add Option'; addOptBtn.className='ml-2';
+                        addOptBtn.addEventListener('click', () => {
+                            const text = newOptInput.value.trim(); if (!text) return alert('Option text required');
+                            const row = document.createElement('div'); row.className='option-row';
+                            row.textContent = text;
+                            // store text on dataset for later collection
+                            row.dataset.optText = text;
+                            optsDiv.appendChild(row);
+                            newOptInput.value = '';
+                        });
+
+                        const saveNewQ = document.createElement('button'); saveNewQ.textContent='Save Question'; saveNewQ.className='px-2 py-1 bg-blue-600 text-white rounded';
+                        saveNewQ.addEventListener('click', async () => {
+                            const qText = (qt.value || '').trim(); if (!qText) return alert('Question text required');
+                            const qType = parseInt(typeSel.value || 0,10) || 1;
+                            const opts = Array.from(optsDiv.querySelectorAll('.option-row')).map(r => ({ question_option_text: r.dataset.optText || r.textContent }));
+                            const payload = { run_id: runId, flag_id: flag.flag_id, question_type: qType, question_text: qText };
+                            if (opts.length) payload.options = opts;
+                            try{
+                                const res = await fetch('/api/questions', { method: 'POST', headers: getAuthHeaders(), body: JSON.stringify(payload) });
+                                if (!res.ok) { const txt = await res.text().catch(()=>''); return alert('Failed to create question: '+res.status+' '+txt); }
+                                const qjson = await res.json();
+                                const createdQ = qjson.question || qjson;
+                                // fetch updated flag and re-open editor for this flag (no full flags reload)
+                                const fres = await fetch('/api/flags/' + encodeURIComponent(flag.flag_id), { headers: getAuthHeaders() });
+                                if (fres.ok) {
+                                    const fjson = await fres.json();
+                                    openEditorForFlag(fjson);
+                                    // highlight newly created question
+                                    setTimeout(() => {
+                                        const el = document.querySelector(`[data-question-id="${createdQ.question_id}"]`);
+                                        if (el) {
+                                            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                            el.style.boxShadow = '0 0 0 3px rgba(59,130,246,0.35)';
+                                            setTimeout(() => { el.style.boxShadow = ''; }, 3000);
+                                        }
+                                    }, 250);
+                                }
+                            }catch(e){ console.error(e); alert('Failed to create question'); }
+                        });
+
+                        qBox.appendChild(qt); qBox.appendChild(document.createElement('br'));
+                        qBox.appendChild(document.createTextNode('Type: ')); qBox.appendChild(typeSel); qBox.appendChild(document.createElement('br'));
+                        qBox.appendChild(optsDiv); qBox.appendChild(newOptInput); qBox.appendChild(addOptBtn); qBox.appendChild(document.createElement('br'));
+                        qBox.appendChild(saveNewQ);
+                        newQBox.appendChild(qBox);
+                    });
+
+                    ed.appendChild(addQbtn2);
+                    ed.appendChild(newQBox);
                 }
 
                 // Delete flag button (also delete questions)
@@ -305,8 +569,8 @@
                 ed.appendChild(delFlagBtn);
             }
 
-            // initial load
-            loadFlags();
+            // initial load: load question types first, then flags
+            loadQuestionTypes().then(() => loadFlags()).catch(() => loadFlags());
         })();
     </script>
 @endsection

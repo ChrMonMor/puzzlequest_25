@@ -52,7 +52,16 @@ class WebRunController extends Controller
     public function show($id)
     {
         $run = Run::with(['user', 'flags', 'questions'])->where('run_id', $id)->firstOrFail();
-        return view('runs.show', ['run' => $run]);
+
+        // Load a small list of recent histories for this run (users who ran it)
+        // include history flags so we can plot where players reached flags
+        $histories = \App\Models\History::with(['user','flags'])
+            ->where('run_id', $run->run_id)
+            ->orderByDesc('history_start')
+            ->limit(10)
+            ->get();
+
+        return view('runs.show', ['run' => $run, 'histories' => $histories]);
     }
 
     /**

@@ -8,6 +8,7 @@ use App\Models\Question;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Str;
 use Exception;
 
 class RunController extends Controller
@@ -164,6 +165,38 @@ class RunController extends Controller
             return response()->json(['message' => 'Run deleted'], 200);
         } catch (Exception $e) {
             return response()->json(['error' => 'Failed to delete run', 'details' => $e->getMessage()], 500);
+        }
+    }
+
+    // Generate a unique 6-character alphanumeric pin for a run and save it
+    public function generatePin($id)
+    {
+        try {
+            $run = Run::findOrFail($id);
+            $user = auth('api')->user();
+            if (!$user) return response()->json(['error' => 'Unauthorized. Please log in.'], 401);
+            if ($run->user_id !== $user->user_id) return response()->json(['error' => 'Unauthorized'], 403);
+
+            $attempts = 0;
+            $pin = null;
+            do {
+                $attempts++;
+                // Uppercase alphanumeric
+                $candidate = strtoupper(Str::random(6));
+                // Ensure only letters and numbers (Str::random already alphanumeric)
+                $exists = Run::where('run_pin', $candidate)->exists();
+                if (!$exists) { $pin = $candidate; break; }
+            } while ($attempts < 10);
+
+            if (!$pin) return response()->json(['error' => 'Failed to generate unique pin'], 500);
+
+            $run->run_pin = $pin;
+            $run->run_last_update = now();
+            $run->save();
+
+            return response()->json(['message' => 'Pin generated', 'pin' => $pin, 'run' => $run], 200);
+        } catch (Exception $e) {
+            return response()->json(['error' => 'Failed to generate pin', 'details' => $e->getMessage()], 500);
         }
     }
 

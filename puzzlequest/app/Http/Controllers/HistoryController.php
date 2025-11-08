@@ -81,7 +81,7 @@ class HistoryController extends Controller
                 foreach ($run->flags as $flag) {
                     HistoryFlag::create([
                         'history_id' => $h->history_id,
-                        'history_flag_reached' => false,
+                        'history_flag_reached' => null,
                         'history_flag_long' => $flag->flag_long,
                         'history_flag_lat' => $flag->flag_lat,
                         'history_flag_distance' => null,
@@ -160,7 +160,7 @@ class HistoryController extends Controller
                 ->firstOrFail();
 
             $flag->update([
-                'history_flag_reached' => true,
+                'history_flag_reached' => now(),
                 'history_flag_point' => $request->input('history_flag_point', 0),
                 'history_flag_distance' => $request->input('history_flag_distance'),
             ]);

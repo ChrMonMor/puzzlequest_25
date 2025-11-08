@@ -1,8 +1,12 @@
 <nav class="site-nav" aria-label="Primary">
     @if(auth()->check())
     <a href="{{ route('map') }}">Map</a>
+    {{-- Public runs listing --}}
     <a href="{{ route('runs.index') }}">Runs</a>
+    {{-- Authenticated user's runs --}}
     <a href="{{ route('runs.mine') }}">My Runs</a>
+    {{-- Link to the current user's histories --}}
+    <a href="{{ route('stats.show', auth()->user()->user_id) }}">My History</a>
         <span>Welcome, {{ auth()->user()->user_name ?? auth()->user()->name ?? 'User' }}</span>
         <form method="POST" action="{{ route('logout') }}" style="display:inline">
             @csrf

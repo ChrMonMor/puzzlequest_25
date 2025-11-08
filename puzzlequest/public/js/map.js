@@ -258,8 +258,11 @@ document.addEventListener('DOMContentLoaded', () => {
             answersContainer.appendChild(optDiv);
         }
 
-    // Add initial answer option
-    addAnswerOption();
+    // Options are optional now — do not add an initial option by default.
+    // Show a tiny hint so users know they can save a question without options.
+    const optHint = document.createElement('div');
+    optHint.classList.add('text-sm', 'text-gray-600', 'mb-2');
+    optHint.textContent = 'Options are optional — leave blank for an open answer (no options).';
 
         // Button to add new answer option
         const addAnswerBtn = document.createElement('button');
@@ -307,6 +310,8 @@ document.addEventListener('DOMContentLoaded', () => {
     questionBlock.appendChild(questionInput);
     // question type select
     questionBlock.appendChild(typeSelect);
+    // Insert hint before the answers container so it appears near the options area
+    questionBlock.appendChild(optHint);
     questionBlock.appendChild(answersContainer);
     questionBlock.appendChild(addAnswerBtn);
     questionBlock.appendChild(saveBtn);
@@ -376,8 +381,15 @@ document.addEventListener('DOMContentLoaded', () => {
     // Load run types and question types first to populate UI, then load pins
     // Save All handler: collects unsaved question forms, creates flags and questions in bulk, then options
     async function saveAll() {
-        // Collect pending blocks added to the batch
-        const blocks = Array.from(document.querySelectorAll('.question-block')).filter(b => b.dataset.pending === 'true' && b.dataset.saved !== 'true');
+        // Collect question blocks that are not yet saved. Include ones the user added to the batch
+        // and also any blocks with text the user DID NOT explicitly "Add to Batch" (so Save All acts on all filled forms).
+        const blocks = Array.from(document.querySelectorAll('.question-block')).filter(b => {
+            if (b.dataset.saved === 'true') return false;
+            if (b.dataset.pending === 'true') return true;
+            // fallback: include any block that has non-empty textarea (user filled it but didn't click Add to Batch)
+            const ta = b.querySelector('textarea');
+            return ta && ta.value && ta.value.trim().length > 0;
+        });
         if (!blocks.length) { alert('Nothing to save.'); return; }
 
         try {
@@ -436,13 +448,33 @@ document.addEventListener('DOMContentLoaded', () => {
                 const flag = flagJson.flag || flagJson;
                 const flagId = flag.flag_id || flag.id;
 
-                // Prepare question payload from stored dataset
-                const qText = b.dataset.questionText || '';
-                const qType = b.dataset.questionType ? parseInt(b.dataset.questionType,10) : 1;
-                let opts = [];
-                try { opts = b.dataset.options ? JSON.parse(b.dataset.options) : []; } catch(e) { opts = []; }
+                // Prepare question payload: prefer serialized dataset values (from Add to Batch)
+                // but fall back to reading values from the form inputs so Save All works without Add-to-Batch.
+                let qText = '';
+                if (b.dataset.questionText) qText = b.dataset.questionText;
+                else {
+                    const ta = b.querySelector('textarea'); qText = ta ? (ta.value || '').trim() : '';
+                }
 
-                const questionPayload = { run_id: currentRunId, flag_id: flagId, question_type: qType, question_text: qText, options: opts.map(t => ({ question_option_text: t })) };
+                let qType = 1;
+                if (b.dataset.questionType) qType = parseInt(b.dataset.questionType,10) || 1;
+                else {
+                    const sel = b.querySelector('select'); qType = sel && sel.value ? parseInt(sel.value,10) : 1;
+                }
+
+                let opts = [];
+                if (b.dataset.options) {
+                    try { opts = JSON.parse(b.dataset.options); } catch(e) { opts = []; }
+                } else {
+                    // read inputs inside answers container
+                    const inputs = Array.from(b.querySelectorAll('.answers-container input'));
+                    opts = inputs.map(i => (i.value || '').trim()).filter(t => t);
+                }
+
+                const questionPayload = { run_id: currentRunId, flag_id: flagId, question_type: qType, question_text: qText };
+                if (Array.isArray(opts) && opts.length) {
+                    questionPayload.options = opts.map(t => ({ question_option_text: t }));
+                }
 
                 const qRes = await fetch('/api/questions/', { method: 'POST', headers: getAuthHeaders(), body: JSON.stringify(questionPayload) });
                 if (!qRes.ok) {
