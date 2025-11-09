@@ -10,12 +10,13 @@ use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
 use Exception;
+use Illuminate\Database\QueryException;
 
 class RunController extends Controller
 {
     public function __construct()
     {
-        $this->middleware('auth:api')->except(['index','show']);
+        $this->middleware('auth.api')->except(['index','show']);
         $this->middleware(\App\Http\Middleware\BlockGuestMiddleware::class)->only(['store', 'update', 'destroy']);
     }
     // List runs with optional server-side search & pagination
@@ -107,21 +108,36 @@ class RunController extends Controller
                 'run_last_update' => now(),
             ]));
 
-            // If no run_pin was provided, generate one (reuse generatePin logic)
+            // If no run_pin was provided, generate one and try to save it atomically.
+            // Use a retry loop that catches DB unique-constraint violations so concurrent
+            // requests won't create duplicate pins (race condition between exists() and save()).
             if (empty($run->run_pin)) {
                 $attempts = 0;
-                $pin = null;
-                do {
+                $saved = false;
+                while ($attempts < 10 && !$saved) {
                     $attempts++;
                     $candidate = strtoupper(Str::random(6));
-                    $exists = Run::where('run_pin', $candidate)->exists();
-                    if (!$exists) { $pin = $candidate; break; }
-                } while ($attempts < 10);
-
-                if ($pin) {
-                    $run->run_pin = $pin;
+                    $run->run_pin = $candidate;
                     $run->run_last_update = now();
-                    $run->save();
+                    try {
+                        $run->save();
+                        $saved = true;
+                        break;
+                    } catch (QueryException $qe) {
+                        // Postgres unique violation SQLSTATE is 23505. If another driver,
+                        // fall back to checking SQLSTATE or message conservatively.
+                        $sqlState = $qe->errorInfo[0] ?? null;
+                        if ($sqlState === '23505' || stripos($qe->getMessage() ?? '', 'unique') !== false) {
+                            // Collision: try another candidate
+                            continue;
+                        }
+                        // Unknown DB error: rethrow to be handled by outer catch
+                        throw $qe;
+                    }
+                }
+
+                if (!$saved) {
+                    return response()->json(['error' => 'Failed to generate unique run pin after several attempts'], 500);
                 }
             }
 
@@ -221,21 +237,29 @@ class RunController extends Controller
             if ($run->user_id !== $user->user_id) return response()->json(['error' => 'Unauthorized'], 403);
 
             $attempts = 0;
+            $saved = false;
             $pin = null;
-            do {
+            while ($attempts < 10 && !$saved) {
                 $attempts++;
-                // Uppercase alphanumeric
                 $candidate = strtoupper(Str::random(6));
-                // Ensure only letters and numbers (Str::random already alphanumeric)
-                $exists = Run::where('run_pin', $candidate)->exists();
-                if (!$exists) { $pin = $candidate; break; }
-            } while ($attempts < 10);
+                $run->run_pin = $candidate;
+                $run->run_last_update = now();
+                try {
+                    $run->save();
+                    $saved = true;
+                    $pin = $candidate;
+                    break;
+                } catch (QueryException $qe) {
+                    $sqlState = $qe->errorInfo[0] ?? null;
+                    if ($sqlState === '23505' || stripos($qe->getMessage() ?? '', 'unique') !== false) {
+                        // Collision: try again
+                        continue;
+                    }
+                    throw $qe;
+                }
+            }
 
-            if (!$pin) return response()->json(['error' => 'Failed to generate unique pin'], 500);
-
-            $run->run_pin = $pin;
-            $run->run_last_update = now();
-            $run->save();
+            if (!$saved) return response()->json(['error' => 'Failed to generate unique pin'], 500);
 
             return response()->json(['message' => 'Pin generated', 'pin' => $pin, 'run' => $run], 200);
         } catch (Exception $e) {
@@ -243,161 +267,6 @@ class RunController extends Controller
         }
     }
 
-    // ---------------- Flags Bulk Operations ----------------
-
-    public function bulkFlags(Request $request, $runId)
-    {
-        try {
-            $run = Run::findOrFail($runId);
-            $user = auth('api')->user();
-            if (!$user) return response()->json(['error' => 'Unauthorized. Please log in.'], 401);
-            if ($run->user_id !== $user->user_id) {
-                return response()->json(['error' => 'Unauthorized'], 403);
-            }
-
-            $flagsData = $request->input('flags', []);
-            $createdFlags = [];
-
-            foreach ($flagsData as $flagData) {
-                $validator = Validator::make($flagData, [
-                    'flag_number' => 'required|integer',
-                    'flag_long' => 'required|numeric',
-                    'flag_lat' => 'required|numeric',
-                ]);
-                if ($validator->fails()) continue;
-
-                $createdFlags[] = Flag::create(array_merge($flagData, ['run_id' => $runId]));
-            }
-
-            return response()->json(['message' => 'Flags created', 'flags' => $createdFlags], 201);
-        } catch (Exception $e) {
-            return response()->json(['error' => 'Failed to bulk create flags', 'details' => $e->getMessage()], 500);
-        }
-    }
-
-    public function bulkUpdateFlags(Request $request, $runId)
-    {
-        try {
-            $run = Run::findOrFail($runId);
-            $user = auth('api')->user();
-            if (!$user) return response()->json(['error' => 'Unauthorized. Please log in.'], 401);
-            if ($run->user_id !== $user->user_id) {
-                return response()->json(['error' => 'Unauthorized'], 403);
-            }
-
-            $flagsData = $request->input('flags', []);
-            $updatedFlags = [];
-
-            foreach ($flagsData as $flagData) {
-                $flag = Flag::find($flagData['flag_id'] ?? null);
-                if (!$flag || $flag->run_id !== $runId) continue;
-
-                $flag->update($flagData);
-                $updatedFlags[] = $flag;
-            }
-
-            return response()->json(['message' => 'Flags updated', 'flags' => $updatedFlags], 200);
-        } catch (Exception $e) {
-            return response()->json(['error' => 'Failed to bulk update flags', 'details' => $e->getMessage()], 500);
-        }
-    }
-
-    public function bulkDeleteFlags(Request $request, $runId)
-    {
-        try {
-            $run = Run::findOrFail($runId);
-            $user = auth('api')->user();
-            if (!$user) return response()->json(['error' => 'Unauthorized. Please log in.'], 401);
-            if ($run->user_id !== $user->user_id) {
-                return response()->json(['error' => 'Unauthorized'], 403);
-            }
-
-            $flagIds = $request->input('flag_ids', []);
-            $deletedCount = Flag::where('run_id', $runId)->whereIn('flag_id', $flagIds)->delete();
-
-            // Return a consistent message expected by tests
-            return response()->json(['message' => 'Flags deleted'], 200);
-        } catch (Exception $e) {
-            return response()->json(['error' => 'Failed to bulk delete flags', 'details' => $e->getMessage()], 500);
-        }
-    }
-
-    // ---------------- Questions Bulk Operations ----------------
-
-    public function bulkQuestions(Request $request, $runId)
-    {
-        try {
-            $run = Run::findOrFail($runId);
-            $user = auth('api')->user();
-            if (!$user) return response()->json(['error' => 'Unauthorized. Please log in.'], 401);
-            if ($run->user_id !== $user->user_id) {
-                return response()->json(['error' => 'Unauthorized'], 403);
-            }
-
-            $questionsData = $request->input('questions', []);
-            $createdQuestions = [];
-
-            foreach ($questionsData as $qData) {
-                $validator = Validator::make($qData, [
-                    'flag_id' => 'nullable|exists:flags,flag_id',
-                    'question_type' => 'required|exists:question_types,question_type_id',
-                    'question_text' => 'required|string',
-                    'question_answer' => 'nullable|string',
-                ]);
-                if ($validator->fails()) continue;
-
-                $createdQuestions[] = Question::create(array_merge($qData, ['run_id' => $runId]));
-            }
-
-            return response()->json(['message' => 'Questions created', 'questions' => $createdQuestions], 201);
-        } catch (Exception $e) {
-            return response()->json(['error' => 'Failed to bulk create questions', 'details' => $e->getMessage()], 500);
-        }
-    }
-
-    public function bulkUpdateQuestions(Request $request, $runId)
-    {
-        try {
-            $run = Run::findOrFail($runId);
-            $user = auth('api')->user();
-            if (!$user) return response()->json(['error' => 'Unauthorized. Please log in.'], 401);
-            if ($run->user_id !== $user->user_id) {
-                return response()->json(['error' => 'Unauthorized'], 403);
-            }
-
-            $questionsData = $request->input('questions', []);
-            $updatedQuestions = [];
-
-            foreach ($questionsData as $qData) {
-                $question = Question::find($qData['question_id'] ?? null);
-                if (!$question || $question->run_id !== $runId) continue;
-
-                $question->update($qData);
-                $updatedQuestions[] = $question;
-            }
-
-            return response()->json(['message' => 'Questions updated', 'questions' => $updatedQuestions], 200);
-        } catch (Exception $e) {
-            return response()->json(['error' => 'Failed to bulk update questions', 'details' => $e->getMessage()], 500);
-        }
-    }
-
-    public function bulkDeleteQuestions(Request $request, $runId)
-    {
-        try {
-            $run = Run::findOrFail($runId);
-            $user = auth('api')->user();
-            if (!$user) return response()->json(['error' => 'Unauthorized. Please log in.'], 401);
-            if ($run->user_id !== $user->user_id) {
-                return response()->json(['error' => 'Unauthorized'], 403);
-            }
-
-            $questionIds = $request->input('question_ids', []);
-            $deletedCount = Question::where('run_id', $runId)->whereIn('question_id', $questionIds)->delete();
-
-            return response()->json(['message' => "Deleted $deletedCount questions"], 200);
-        } catch (Exception $e) {
-            return response()->json(['error' => 'Failed to bulk delete questions', 'details' => $e->getMessage()], 500);
-        }
-    }
+    // Bulk operations for flags and questions are implemented in their respective controllers
+    // (FlagController and QuestionController) and the routes point to those implementations.
 }

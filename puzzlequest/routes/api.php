@@ -64,7 +64,7 @@ Route::prefix('runs')->group(function () {
     Route::get('pin/{pin}', [RunController::class, 'findByPin']);
     Route::get('{id}', [RunController::class, 'show']);       // Public: show single run
 
-    Route::middleware('auth:api')->group(function () {
+    Route::middleware('auth.api')->group(function () {
         Route::post('/', [RunController::class, 'store']);    // Create run
         Route::put('{id}', [RunController::class, 'update']); // Update run
         Route::delete('{id}', [RunController::class, 'destroy']); // Delete run
@@ -88,7 +88,7 @@ Route::prefix('flags')->group(function () {
     Route::get('/', [FlagController::class, 'index']);        // Public
     Route::get('{id}', [FlagController::class, 'show']);     // Public
 
-    Route::middleware('auth:api')->group(function () {
+    Route::middleware('auth.api')->group(function () {
         Route::post('/', [FlagController::class, 'store']);
         Route::put('{id}', [FlagController::class, 'update']);
         Route::delete('{id}', [FlagController::class, 'destroy']);
@@ -100,7 +100,7 @@ Route::prefix('run-types')->group(function () {
     Route::get('/', [RunTypeController::class, 'index']);    // Public
     Route::get('{id}', [RunTypeController::class, 'show']); // Public
 
-    Route::middleware('auth:api')->group(function () {
+    Route::middleware('auth.api')->group(function () {
         Route::post('/', [RunTypeController::class, 'store']);
         Route::put('{id}', [RunTypeController::class, 'update']);
         Route::delete('{id}', [RunTypeController::class, 'destroy']);
@@ -112,7 +112,7 @@ Route::prefix('questions')->group(function () {
     Route::get('/', [QuestionController::class, 'index']);        // Public
     Route::get('{id}', [QuestionController::class, 'show']);     // Public
 
-    Route::middleware('auth:api')->group(function () {
+    Route::middleware('auth.api')->group(function () {
         Route::post('/', [QuestionController::class, 'store']);
         Route::put('{id}', [QuestionController::class, 'update']);
         Route::delete('{id}', [QuestionController::class, 'destroy']);
@@ -124,7 +124,7 @@ Route::prefix('question-options')->group(function () {
     Route::get('/', [QuestionOptionController::class, 'index']);       // Public
     Route::get('{id}', [QuestionOptionController::class, 'show']);     // Public
 
-    Route::middleware('auth:api')->group(function () {
+    Route::middleware('auth.api')->group(function () {
         Route::post('/', [QuestionOptionController::class, 'store']);
         Route::put('{id}', [QuestionOptionController::class, 'update']);
         Route::delete('{id}', [QuestionOptionController::class, 'destroy']);
@@ -141,7 +141,7 @@ Route::prefix('question-types')->group(function () {
     Route::get('/', [QuestionTypeController::class, 'index']);      // Public
     Route::get('{id}', [QuestionTypeController::class, 'show']);   // Public
 
-    Route::middleware('auth:api')->group(function () {
+    Route::middleware('auth.api')->group(function () {
         Route::post('/', [QuestionTypeController::class, 'store']);
         Route::put('{id}', [QuestionTypeController::class, 'update']);
         Route::delete('{id}', [QuestionTypeController::class, 'destroy']);

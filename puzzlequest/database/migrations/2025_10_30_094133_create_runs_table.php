@@ -21,7 +21,7 @@ return new class extends Migration
             $table->text('run_description')->nullable();
             $table->string('run_img_icon', 255)->nullable();
             $table->string('run_img_front', 255)->nullable();
-            $table->string('run_pin', 6)->nullable();
+            $table->string('run_pin', 6)->unique()->nullable();
             $table->string('run_location', 3)->nullable();
             $table->timestamp('run_last_update')->nullable();
 

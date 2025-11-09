@@ -414,10 +414,12 @@ document.addEventListener('DOMContentLoaded', () => {
             const saveAllBtnEl = document.getElementById('save-questions');
             if (saveAllBtnEl) { saveAllBtnEl.disabled = true; saveAllBtnEl.textContent = 'Saving...'; }
 
-            // 2) Iterate blocks sequentially: create flag then create question (with options) referencing that flag
+            // 2) Bulk create flags, then bulk create questions to reduce HTTP requests
+            // Collect flag payloads in the same order as blocks so we can map returned flags to blocks by index
+            const flagBlocks = [];
+            const flagsPayload = [];
             for (const b of blocks) {
                 const tId = b.dataset.tempId;
-                // Prefer the pendingFlags entry for coordinates in case marker was removed; fall back to live marker
                 const pf = pendingFlags.find(p => String(p.tempId) === String(tId));
                 let ll = null;
                 let marker = null;
@@ -428,37 +430,64 @@ document.addEventListener('DOMContentLoaded', () => {
                     marker = savedMarkers.get(tId) || savedMarkers.get(parseInt(tId,10));
                     if (marker) ll = marker.getLatLng();
                 }
-
                 if (!ll) { console.warn('Skipping block, coordinates not found', b); continue; }
+                flagBlocks.push({ block: b, tempId: tId, marker });
+                flagsPayload.push({ flag_lat: ll.lat, flag_long: ll.lng });
+            }
 
-                // Create flag (server assigns flag_number)
-                const flagRes = await fetch('/api/flags/', {
-                    method: 'POST', headers: getAuthHeaders(), body: JSON.stringify({ run_id: currentRunId, flag_lat: ll.lat, flag_long: ll.lng })
-                });
-                if (!flagRes.ok) {
-                    // Read response body for debugging and attach to block dataset
-                    let bodyText = '';
-                    try { bodyText = await flagRes.text(); } catch (e) { bodyText = '<unreadable response>'; }
-                    console.error('Flag create failed for block', { status: flagRes.status, body: bodyText, block: b });
-                    b.dataset.error = `Flag create failed: ${flagRes.status} ${bodyText}`;
-                    // continue to next block rather than throwing to allow other items to be saved
-                    continue;
+            // Bulk create flags in one request
+            if (flagsPayload.length) {
+                try {
+                    const res = await fetch(`/api/runs/${encodeURIComponent(currentRunId)}/flags/bulk`, {
+                        method: 'POST', headers: getAuthHeaders(), body: JSON.stringify({ flags: flagsPayload })
+                    });
+                    if (!res.ok) {
+                        const txt = await res.text().catch(() => '');
+                        console.error('Bulk flag create failed', res.status, txt);
+                    } else {
+                        const created = await res.json();
+                        // FlagController returns a top-level array of created flags
+                        const createdFlags = Array.isArray(created) ? created : (created.flags || created.data || []);
+                        // Map created flags back to the blocks in order
+                        for (let i = 0; i < createdFlags.length; i++) {
+                            const f = createdFlags[i];
+                            const mapping = flagBlocks[i];
+                            if (!mapping) continue;
+                            const b = mapping.block;
+                            const marker = mapping.marker;
+                            const flagId = f.flag_id || f.id;
+                            b.dataset.saved = 'true';
+                            if (flagId) b.dataset.flagId = String(flagId);
+                            // remap savedMarkers from temp id to server id and update pendingFlags
+                            try {
+                                savedMarkers.delete(mapping.tempId);
+                                if (flagId) savedMarkers.set(flagId, marker);
+                                const idx = pendingFlags.findIndex(p => String(p.tempId) === String(mapping.tempId));
+                                if (idx !== -1) { pendingFlags[idx].saved = true; pendingFlags[idx].flag_id = flagId; }
+                            } catch (e) { console.warn('Failed to remap marker', e); }
+                        }
+                    }
+                } catch (e) {
+                    console.error('Bulk flag create error', e);
                 }
-                const flagJson = await flagRes.json();
-                const flag = flagJson.flag || flagJson;
-                const flagId = flag.flag_id || flag.id;
+            }
 
-                // Prepare question payload: prefer serialized dataset values (from Add to Batch)
-                // but fall back to reading values from the form inputs so Save All works without Add-to-Batch.
-                let qText = '';
-                if (b.dataset.questionText) qText = b.dataset.questionText;
-                else {
+            // 3) Bulk create questions referencing the created flags (or existing flags)
+            const questionsPayload = [];
+            const questionBlocks = [];
+            for (const b of blocks) {
+                const tId = b.dataset.tempId;
+                const pf = pendingFlags.find(p => String(p.tempId) === String(tId));
+                const flagId = b.dataset.flagId || (pf && pf.flag_id) || null;
+                // Prepare question fields (prefer stored dataset values)
+                let qText = b.dataset.questionText || '';
+                if (!qText) {
                     const ta = b.querySelector('textarea'); qText = ta ? (ta.value || '').trim() : '';
                 }
+                if (!qText) continue; // skip empty questions
 
-                let qType = 1;
-                if (b.dataset.questionType) qType = parseInt(b.dataset.questionType,10) || 1;
-                else {
+                let qType = b.dataset.questionType ? parseInt(b.dataset.questionType,10) : 1;
+                if (!qType) {
                     const sel = b.querySelector('select'); qType = sel && sel.value ? parseInt(sel.value,10) : 1;
                 }
 
@@ -466,38 +495,40 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (b.dataset.options) {
                     try { opts = JSON.parse(b.dataset.options); } catch(e) { opts = []; }
                 } else {
-                    // read inputs inside answers container
                     const inputs = Array.from(b.querySelectorAll('.answers-container input'));
                     opts = inputs.map(i => (i.value || '').trim()).filter(t => t);
                 }
 
-                const questionPayload = { run_id: currentRunId, flag_id: flagId, question_type: qType, question_text: qText };
-                if (Array.isArray(opts) && opts.length) {
-                    questionPayload.options = opts.map(t => ({ question_option_text: t }));
-                }
+                const qPayload = { flag_id: flagId, question_type: qType, question_text: qText };
+                if (Array.isArray(opts) && opts.length) qPayload.options = opts.map(t => ({ question_option_text: t }));
 
-                const qRes = await fetch('/api/questions/', { method: 'POST', headers: getAuthHeaders(), body: JSON.stringify(questionPayload) });
-                if (!qRes.ok) {
-                    let qBody = '';
-                    try { qBody = await qRes.text(); } catch (e) { qBody = '<unreadable response>'; }
-                    console.error('Question create failed for flag', { status: qRes.status, body: qBody, flagId, block: b });
-                    b.dataset.error = `Question create failed: ${qRes.status} ${qBody}`;
-                }
-                const qJson = await qRes.json();
-                const q = qJson.question || qJson;
-                const qId = q.question_id || q.id;
+                // push question only if it has a flag_id or null (QuestionController will accept nullable flag_id)
+                questionsPayload.push(qPayload);
+                questionBlocks.push({ block: b });
+            }
 
-                // Update datasets and marker mapping
-                b.dataset.saved = 'true';
-                if (flagId) b.dataset.flagId = String(flagId);
-                if (qId) b.dataset.questionId = String(qId);
-                // remap savedMarkers from temp id to server id and update pendingFlags
+            if (questionsPayload.length) {
                 try {
-                    savedMarkers.delete(tId);
-                    if (flagId) savedMarkers.set(flagId, marker);
-                    const idx = pendingFlags.findIndex(p => String(p.tempId) === String(tId));
-                    if (idx !== -1) { pendingFlags[idx].saved = true; pendingFlags[idx].flag_id = flagId; }
-                } catch (e) {}
+                    const qRes = await fetch(`/api/runs/${encodeURIComponent(currentRunId)}/questions/bulk`, {
+                        method: 'POST', headers: getAuthHeaders(), body: JSON.stringify({ questions: questionsPayload })
+                    });
+                    if (!qRes.ok) {
+                        const txt = await qRes.text().catch(() => '');
+                        console.error('Bulk question create failed', qRes.status, txt);
+                    } else {
+                        const qJson = await qRes.json();
+                        const createdQs = Array.isArray(qJson) ? qJson : (qJson.questions || []);
+                        for (let i = 0; i < createdQs.length; i++) {
+                            const created = createdQs[i];
+                            const mapping = questionBlocks[i];
+                            if (!mapping) continue;
+                            const b = mapping.block;
+                            const qId = created.question_id || created.id;
+                            if (qId) b.dataset.questionId = String(qId);
+                            b.dataset.saved = 'true';
+                        }
+                    }
+                } catch (e) { console.error('Bulk questions error', e); }
             }
 
             if (saveAllBtnEl) { saveAllBtnEl.disabled = false; saveAllBtnEl.textContent = 'Save All'; }

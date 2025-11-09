@@ -15,7 +15,7 @@ class QuestionController extends Controller
 {
     public function __construct()
     {
-        $this->middleware('auth:api')->except(['index','show']);
+        $this->middleware('auth.api')->except(['index','show']);
         $this->middleware(\App\Http\Middleware\BlockGuestMiddleware::class)->only(['store', 'storeWithAnswer', 'update', 'destroy']);
     }
     // List all questions (with options, type, run, flag)
@@ -185,21 +185,73 @@ class QuestionController extends Controller
             if ($run->user_id !== $user->user_id) {
                 return response()->json(['error' => 'Unauthorized'], 403);
             }
-
             $questionsData = $request->input('questions', []);
-            $createdQuestions = [];
 
-            foreach ($questionsData as $qData) {
-                $validator = Validator::make($qData, [
-                    'flag_id' => 'nullable|exists:flags,flag_id',
-                    'question_type' => 'required|exists:question_types,question_type_id',
-                    'question_text' => 'required|string',
-                    'question_answer' => 'nullable|string',
-                ]);
-                if ($validator->fails()) continue;
-
-                $createdQuestions[] = Question::create(array_merge($qData, ['run_id' => $runId]));
+            // Normalize input: accept a top-level array or a 'questions' key
+            if (!is_array($questionsData)) return response()->json(['error' => 'questions must be an array'], 422);
+            if (array_keys($questionsData) !== range(0, count($questionsData) - 1)) {
+                $questionsData = [$questionsData];
             }
+
+            // Create questions and options inside a single transaction for atomicity
+            $createdQuestions = DB::transaction(function () use ($questionsData, $runId) {
+                $out = [];
+
+                foreach ($questionsData as $qData) {
+                    $validator = Validator::make($qData, [
+                        'flag_id' => 'nullable|exists:flags,flag_id',
+                        'question_type' => 'required|exists:question_types,question_type_id',
+                        'question_text' => 'required|string',
+                        'options' => 'nullable|array',
+                        'options.*.question_option_text' => 'required_with:options|string',
+                        'options.*.is_answer' => 'sometimes|boolean',
+                        'answer_index' => 'sometimes|integer|min:0',
+                    ]);
+                    if ($validator->fails()) continue;
+
+                    // Create the question
+                    $q = Question::create(array_merge($qData, ['run_id' => $runId]));
+
+                    // Create options if provided and capture the chosen answer
+                    $options = $qData['options'] ?? [];
+                    $createdOptionIds = [];
+                    $chosenOptionId = null;
+                    if (!empty($options) && is_array($options)) {
+                        foreach ($options as $idx => $opt) {
+                            $created = \App\Models\QuestionOption::create([
+                                'question_id' => $q->question_id,
+                                'question_option_text' => $opt['question_option_text'] ?? null,
+                            ]);
+                            $createdOptionIds[] = $created->question_option_id;
+
+                            // If option explicitly marked as answer, prefer that
+                            if (!is_null($opt['is_answer'] ?? null) && $opt['is_answer']) {
+                                $chosenOptionId = $created->question_option_id;
+                            }
+                        }
+
+                        // If answer_index was provided, use it (overrides implicit first option)
+                        if (isset($qData['answer_index']) && is_int($qData['answer_index']) && isset($createdOptionIds[$qData['answer_index']])) {
+                            $chosenOptionId = $createdOptionIds[$qData['answer_index']];
+                        }
+
+                        // Fallback: use first option as answer if none specified
+                        if (!$chosenOptionId && count($createdOptionIds)) {
+                            $chosenOptionId = $createdOptionIds[0];
+                        }
+                    }
+
+                    if ($chosenOptionId) {
+                        $q->question_answer = $chosenOptionId;
+                        $q->save();
+                    }
+
+                    $q->load(['options', 'questionType', 'flag', 'run']);
+                    $out[] = $q;
+                }
+
+                return $out;
+            });
 
             return response()->json(['message' => 'Questions created', 'questions' => $createdQuestions], 201);
         } catch (Exception $e) {

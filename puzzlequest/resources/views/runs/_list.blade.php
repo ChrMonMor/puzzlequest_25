@@ -14,6 +14,8 @@
     <script>
         // expose current authenticated user's id for client-side ownership checks
         window.__auth_user_id = @json(auth()->check() ? auth()->user()->user_id : null);
+        // indicate whether this page is the 'My Runs' page (server-rendered, do not auto-replace)
+        window.__only_my_runs = @json($onlyMine ?? false);
     </script>
 
     <div class="runs-list" id="runs-list">
@@ -162,12 +164,13 @@
                 }, 300);
             });
 
-            // initial load: replace server-rendered list with first page from API
-            // expose a small global for ownership checks if server provided one
+            // initial load: unless this is the server-rendered "My Runs" page, replace the list with API-driven pagination
             try{
                 window.__auth_user_id = (window.__auth_user_id !== undefined) ? window.__auth_user_id : null;
             }catch(e){ window.__auth_user_id = null; }
-            fetchRunsPage(1, '', true);
+            if (!window.__only_my_runs) {
+                fetchRunsPage(1, '', true);
+            }
         })();
     </script>
 @endif
