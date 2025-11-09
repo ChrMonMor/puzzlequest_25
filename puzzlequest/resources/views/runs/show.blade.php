@@ -40,6 +40,16 @@
             @endif
         </div>
 
+    {{-- Map of flags for this run --}}
+    @section('head')
+        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+        <style>
+            #run-map { height: 60vh; border-radius: .5rem; margin-top: 1rem; }
+        </style>
+    @endsection
+
+    <div id="run-map"></div>
+
         {{-- Small list of recent user histories for this run --}}
         <div style="margin-top:1rem">
             <h3 class="text-lg font-medium">Recent players</h3>
@@ -56,16 +66,6 @@
             @endif
         </div>
     </div>
-
-    {{-- Map of flags for this run --}}
-    @section('head')
-        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
-        <style>
-            #run-map { height: 60vh; border-radius: .5rem; margin-top: 1rem; }
-        </style>
-    @endsection
-
-    <div id="run-map"></div>
 
     @section('scripts')
         {{-- Leaflet JS (CDN) -- ensure L is available before our inline script --}}

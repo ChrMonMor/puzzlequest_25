@@ -82,6 +82,24 @@ class RunController extends Controller
                 'run_last_update' => now(),
             ]));
 
+            // If no run_pin was provided, generate one (reuse generatePin logic)
+            if (empty($run->run_pin)) {
+                $attempts = 0;
+                $pin = null;
+                do {
+                    $attempts++;
+                    $candidate = strtoupper(Str::random(6));
+                    $exists = Run::where('run_pin', $candidate)->exists();
+                    if (!$exists) { $pin = $candidate; break; }
+                } while ($attempts < 10);
+
+                if ($pin) {
+                    $run->run_pin = $pin;
+                    $run->run_last_update = now();
+                    $run->save();
+                }
+            }
+
             $run->load([
                 'runType',
                 'flags.questions.options',

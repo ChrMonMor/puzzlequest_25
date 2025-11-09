@@ -8,7 +8,7 @@
     <p class="muted">All recorded runs and timestamps for this user.</p>
 
     <div style="margin-top:1rem; display:flex; justify-content:space-between; align-items:center; gap:1rem;">
-        <a href="{{ route('stats.index') }}" class="btn btn-secondary">Back to users</a>
+           <a href="{{ route('runs.index') }}" class="btn btn-secondary">Back to runs</a>
         <div class="muted">Total plays: {{ $histories->count() }}</div>
     </div>
 

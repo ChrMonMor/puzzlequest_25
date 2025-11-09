@@ -7,34 +7,38 @@
 @endsection
 
 @section('content')
-    <div class="max-w-4xl mx-auto py-16 px-6">
+    <div class="max-w-4xl mx-auto py-12 px-6">
         @if(session('status'))
-            <div class="mb-4 px-4 py-2 bg-green-100 text-green-800 rounded">{{ session('status') }}</div>
+            <div class="mb-4 px-4 py-2 flash flash-success">{{ session('status') }}</div>
         @endif
 
-        <h1 class="text-2xl font-semibold mb-2">Welcome to {{ config('app.name', 'PuzzleQuest') }}</h1>
-        <p class="text-gray-600 mb-6">This is a lightweight landing page that links to the web auth flows (login, register) and a session-only guest flow.</p>
+        <div class="card" style="margin-bottom:1rem">
+            <h1 class="text-2xl font-semibold mb-2">{{ config('app.name', 'PuzzleQuest') }}</h1>
+            <p class="muted">Create and play geolocated puzzle runs. Drop pins on the interactive map to create flags, add questions and options, then use the "Save All" flow to publish a run. Players (or guests) can join runs, enter the pin to play, and you can view aggregated stats with charts and maps.</p>
 
-        <div class="flex flex-wrap gap-3 mb-6">
-
+            <div style="margin-top:1rem; display:flex; gap: .5rem; flex-wrap:wrap; align-items:center">
+                @auth
+                    <a href="{{ route('map') }}" class="btn btn-primary">Create New Run</a>
+                    <a href="{{ route('runs.mine') }}" class="btn btn-secondary">My runs</a>
+                    <a href="{{ route('stats.show', auth()->user()->user_id) }}" class="btn btn-secondary">My stats</a>
+                @else
+                    <a href="{{ route('login') }}" class="btn btn-primary">Log in</a>
+                    <a href="{{ route('register') }}" class="btn btn-secondary">Register</a>
+                    <form method="POST" action="{{ route('guest.create') }}" style="display:inline">
+                        @csrf
+                        <button type="submit" class="btn btn-secondary">Start guest session</button>
+                    </form>
+                @endauth
+            </div>
         </div>
 
-        @if(auth()->check() || session('guest'))
-            <div class="prose max-w-none">
-                <h2>Available Runs</h2>
-                @php
-                    $runs = \App\Models\Run::with('runType')->orderBy('run_added', 'desc')->take(50)->get();
-                @endphp
-                @include('runs._list')
-            </div>
-        @else
-            <div class="prose max-w-none">
-                <h2>Quick links</h2>
-                <ul>
-                    <li><a href="https://laravel.com/docs" target="_blank">Documentation</a></li>
-                    <li><a href="https://laracasts.com" target="_blank">Laracasts</a></li>
-                </ul>
-            </div>
-        @endif
+        @php
+            $runs = \App\Models\Run::with('runType','user')->orderBy('run_added', 'desc')->take(50)->get();
+        @endphp
+
+        <div>
+            <h2 class="text-lg font-semibold">Recent runs</h2>
+            @include('runs._list')
+        </div>
     </div>
 @endsection

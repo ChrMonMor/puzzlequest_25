@@ -7,6 +7,7 @@ use App\Models\Run;
 use App\Models\User;
 use App\Models\RunType;
 use Illuminate\Support\Str;
+use Faker\Factory as Faker;
 
 class RunSeeder extends Seeder
 {
@@ -24,37 +25,45 @@ class RunSeeder extends Seeder
             return;
         }
 
-        // Example runs
-        $exampleRuns = [
-            [
-                'run_title' => 'Morning Park Run',
-                'run_description' => 'A quick morning run in the park.',
-                'run_img_icon' => 'park_icon.png',
-                'run_img_front' => 'park_front.png',
-                'run_pin' => '123456',
-                'run_location' => 'NOR',
-            ],
-            [
-                'run_title' => 'City Night Run',
-                'run_description' => 'Enjoy the city lights while running.',
-                'run_img_icon' => 'city_icon.png',
-                'run_img_front' => 'city_front.png',
-                'run_pin' => '567890',
-                'run_location' => 'DKK',
-            ],
+    $faker = Faker::create();
+
+    $scale = max(1, (int) env('SEED_SCALE', 1));
+
+    // A few curated runs
+        $templates = [
+            ['title' => 'Morning Park Run', 'desc' => 'A quick morning run in the park.', 'img_icon' => 'park_icon.png', 'img_front' => 'park_front.png', 'loc' => 'NOR'],
+            ['title' => 'City Night Run', 'desc' => 'Enjoy the city lights while running.', 'img_icon' => 'city_icon.png', 'img_front' => 'city_front.png', 'loc' => 'DKK'],
+            ['title' => 'Riverside Trail', 'desc' => 'Follow the river and solve puzzles along the way.', 'img_icon' => 'river_icon.png', 'img_front' => 'river_front.png', 'loc' => 'SWE'],
+            ['title' => 'Old Town Walk', 'desc' => 'Historic route through the old town, family friendly.', 'img_icon' => 'town_icon.png', 'img_front' => 'town_front.png', 'loc' => 'GBR'],
         ];
 
-        foreach ($exampleRuns as $runData) {
+        // Create curated runs
+        foreach ($templates as $t) {
             Run::create([
                 'user_id' => $users->random()->user_id,
                 'run_type' => $runTypes->random()->run_type_id,
-                'run_title' => $runData['run_title'],
-                'run_description' => $runData['run_description'],
-                'run_img_icon' => $runData['run_img_icon'],
-                'run_img_front' => $runData['run_img_front'],
-                'run_pin' => $runData['run_pin'],
-                'run_location' => $runData['run_location'],
+                'run_title' => $t['title'],
+                'run_description' => $t['desc'],
+                'run_img_icon' => $t['img_icon'],
+                'run_img_front' => $t['img_front'],
+                'run_pin' => Str::upper(Str::random(6)),
+                'run_location' => $t['loc'],
                 'run_last_update' => now(),
+            ]);
+        }
+
+        // Create several random runs (scaled)
+        for ($i = 0; $i < (6 * $scale); $i++) {
+            Run::create([
+                'user_id' => $users->random()->user_id,
+                'run_type' => $runTypes->random()->run_type_id,
+                'run_title' => ucfirst($faker->words(rand(2,4), true)),
+                'run_description' => $faker->sentence(rand(6,14)),
+                'run_img_icon' => 'default_icon.png',
+                'run_img_front' => 'default_front.png',
+                'run_pin' => Str::upper(Str::random(6)),
+                'run_location' => $faker->countryCode(),
+                'run_last_update' => now()->subDays(rand(0,30)),
             ]);
         }
     }

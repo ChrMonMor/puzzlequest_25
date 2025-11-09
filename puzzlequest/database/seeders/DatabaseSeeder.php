@@ -11,6 +11,11 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
+        $scale = max(1, (int) env('SEED_SCALE', 1));
+        if ($scale > 1) {
+            $this->command->info("Seeding with SEED_SCALE={$scale} — this may create a large amount of data.");
+        }
+
         $this->call([
             UserSeeder::class,
             RunTypeSeeder::class,

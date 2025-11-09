@@ -25,30 +25,36 @@ class QuestionSeeder extends Seeder
             return;
         }
 
-        // For example, create 2 questions per flag
-        foreach ($flags as $flag) {
-            for ($i = 1; $i <= 2; $i++) {
-                $questionType = $questionTypes->random();
+        $scale = max(1, (int) env('SEED_SCALE', 1));
 
-                Question::create([
+        // Create a variable number of questions per flag with several options (scaled)
+        foreach ($flags as $flag) {
+            $numQuestions = rand(1, max(1, 3 * $scale));
+            for ($q = 1; $q <= $numQuestions; $q++) {
+                $questionType = $questionTypes->random();
+                $question = Question::create([
                     'run_id' => $flag->run_id,
                     'flag_id' => $flag->flag_id,
                     'question_type' => $questionType->question_type_id,
-                    'question_text' => "Sample question {$i} for flag {$flag->flag_number}",
+                    'question_text' => "What is notable about flag {$flag->flag_number}?",
                 ]);
-                
-                $questions = Question::all();
-                for ($i = 1; $i <= 4; $i++) {
-                    QuestionOption::create([
-                        'question_id' => $questions->last()->question_id,
-                        'question_option_text' => "Option {$i} for question: {$questions->last()->question_text}",
+
+                // create 3- up to (5*scale) options, but cap at 8
+                $opts = rand(3, min(8, 5 * $scale));
+                $createdOptions = [];
+                for ($o = 1; $o <= $opts; $o++) {
+                    $opt = QuestionOption::create([
+                        'question_id' => $question->question_id,
+                        'question_option_text' => "Option {$o} for flag {$flag->flag_number}",
                     ]);
+                    $createdOptions[] = $opt;
                 }
-                
-                $questionOptions = QuestionOption::all()->where('question_id', $questions->last()->question_id);
-                $questions->last()->update([
-                    'question_answer' => $questionOptions->random()->question_option_id,
-                ]);
+
+                // choose an answer at random
+                if (!empty($createdOptions)) {
+                    $answer = $createdOptions[array_rand($createdOptions)];
+                    $question->update(['question_answer' => $answer->question_option_id]);
+                }
             }
         }
     }

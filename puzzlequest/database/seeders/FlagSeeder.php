@@ -20,14 +20,25 @@ class FlagSeeder extends Seeder
             return;
         }
 
-        // For each run, create 3 flags as an example
+        $scale = max(1, (int) env('SEED_SCALE', 1));
+
+        // For each run, create a small cluster of flags (scaled) around a random center to make realistic routes
         foreach ($runs as $run) {
-            for ($i = 1; $i <= 3; $i++) {
+            // choose a random center point for this run
+            $centerLat = mt_rand(-9000, 9000) / 100; // -90..90
+            $centerLng = mt_rand(-18000, 18000) / 100; // -180..180
+            $min = max(3, 5 * $scale);
+            $max = max($min, 8 * $scale);
+            $count = rand($min, $max);
+            for ($i = 1; $i <= $count; $i++) {
+                // small offsets so flags cluster
+                $lat = $centerLat + (mt_rand(-500, 500) / 10000);
+                $lng = $centerLng + (mt_rand(-500, 500) / 10000);
                 Flag::create([
                     'run_id' => $run->run_id,
                     'flag_number' => $i,
-                    'flag_long' => mt_rand(-18000, 18000) / 100, // Random longitude (-180 to 180)
-                    'flag_lat' => mt_rand(-9000, 9000) / 100,    // Random latitude (-90 to 90)
+                    'flag_long' => $lng,
+                    'flag_lat' => $lat,
                 ]);
             }
         }

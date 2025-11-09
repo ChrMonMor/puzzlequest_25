@@ -1,6 +1,6 @@
 <nav class="site-nav" aria-label="Primary" style="display:flex;align-items:center;gap:.75rem">
     <div style="flex:1; display:flex; align-items:center; gap:.6rem">
-        <a href="{{ route('map') }}">Map</a>
+        <a href="{{ route('map') }}">Create New Run</a>
         <a href="{{ route('runs.index') }}">Runs</a>
         @if(auth()->check())
             <a href="{{ route('runs.mine') }}">My Runs</a>

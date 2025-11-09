@@ -47,7 +47,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/my-runs', [WebRunController::class, 'myRuns'])->name('runs.mine');
 
     // Stats pages: users' histories
-    Route::get('/stats', [App\Http\Controllers\WebStatsController::class, 'index'])->name('stats.index');
+    // Removed public listing of users' histories (privacy): keep per-user and per-run stats routes only
     Route::get('/stats/{userId}', [App\Http\Controllers\WebStatsController::class, 'show'])->name('stats.show');
     // Run-level stats (owner-only)
     Route::get('/runs/{runId}/stats', [App\Http\Controllers\WebStatsController::class, 'run'])->name('stats.run');
