@@ -11,24 +11,28 @@ use App\Models\HistoryFlag;
 class WebStatsController extends Controller
 {
     /**
-     * Show list of users and basic stats (number of completed runs).
-     */
-    public function index(Request $request)
-    {
-        // Count completed runs per user (history_end not null)
-        $users = User::withCount(['histories as completed_runs_count' => function ($q) {
-            $q->whereNotNull('history_end');
-        }])->orderByDesc('completed_runs_count')->orderBy('user_name')->get();
-
-        return view('stats.index', ['users' => $users]);
-    }
-
-    /**
      * Show a single user's histories (all runs they've done)
      */
     public function show(Request $request, $userId)
     {
         $user = User::where('user_id', $userId)->firstOrFail();
+
+        // resolve current user (web guard or jwt in session)
+        $currentUser = auth('api')->user();
+        if (!$currentUser && $request->session()->has('jwt_token')) {
+            try {
+                $token = $request->session()->get('jwt_token');
+                $jwtUser = \Tymon\JWTAuth\Facades\JWTAuth::setToken($token)->toUser();
+                if ($jwtUser) $currentUser = $jwtUser;
+            } catch (\Throwable $e) {
+                // ignore
+            }
+        }
+
+        // Only the owner or an admin (is_admin truthy) may view another user's histories
+        if (!$currentUser || ($currentUser->user_id !== $userId && empty($currentUser->is_admin))) {
+            abort(403, 'Not authorized to view this user histories');
+        }
 
         // include history flags and the run's flags so the view can render maps
         $histories = History::with(['run','flags','run.flags'])

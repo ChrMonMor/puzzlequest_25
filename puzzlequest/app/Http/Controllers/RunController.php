@@ -18,20 +18,45 @@ class RunController extends Controller
         $this->middleware('auth:api')->except(['index','show']);
         $this->middleware(\App\Http\Middleware\BlockGuestMiddleware::class)->only(['store', 'update', 'destroy']);
     }
-    // List all runs with related models
-    public function index()
+    // List runs with optional server-side search & pagination
+    public function index(Request $request)
     {
         try {
-            $runs = Run::with([
-                'runType',
-                'flags.questions.options',
-                'questions.options',
-                'questions.questionType'
-            ])->get();
+            $q = $request->query('q');
+            $perPage = max(1, (int) $request->query('per_page', 12));
+
+            $query = Run::with(['runType', 'user']);
+
+            if (!empty($q)) {
+                $query->where(function($w) use ($q) {
+                    $w->where('run_title', 'like', "%{$q}%")
+                      ->orWhere('run_pin', 'like', "%{$q}%")
+                      ->orWhereHas('user', function($u) use ($q) {
+                          $u->where('user_name', 'like', "%{$q}%");
+                      });
+                });
+            }
+
+            $runs = $query->orderByDesc('run_added')->paginate($perPage);
 
             return response()->json($runs, 200);
         } catch (Exception $e) {
             return response()->json(['error' => 'Failed to fetch runs', 'details' => $e->getMessage()], 500);
+        }
+    }
+
+    // Find a run by its pin code
+    public function findByPin($pin)
+    {
+        try {
+            if (empty($pin)) return response()->json(['error' => 'Pin required'], 400);
+
+            $run = Run::with(['runType','user'])->where('run_pin', $pin)->first();
+            if (!$run) return response()->json(['error' => 'Run not found'], 404);
+
+            return response()->json($run, 200);
+        } catch (Exception $e) {
+            return response()->json(['error' => 'Failed to lookup pin', 'details' => $e->getMessage()], 500);
         }
     }
 
