@@ -21,6 +21,15 @@
                     <a href="{{ route('map') }}" class="btn btn-primary">Create New Run</a>
                     <a href="{{ route('runs.mine') }}" class="btn btn-secondary">My runs</a>
                     <a href="{{ route('stats.show', auth()->user()->user_id) }}" class="btn btn-secondary">My stats</a>
+                    @elseif(session('guest'))
+                    <div style="display:flex; gap:.5rem; align-items:center;">
+                        <a href="{{ route('upgrade') }}" class="btn btn-primary">Upgrade account</a>
+                        <a href="{{ route('map') }}" class="btn btn-secondary">Create New Run</a>
+                        <form method="POST" action="{{ route('guest.end') }}" style="display:inline">
+                            @csrf
+                            <button type="submit" class="btn btn-danger">End guest session</button>
+                        </form>
+                    </div>
                 @else
                     <a href="{{ route('login') }}" class="btn btn-primary">Log in</a>
                     <a href="{{ route('register') }}" class="btn btn-secondary">Register</a>
