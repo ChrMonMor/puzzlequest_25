@@ -9,6 +9,12 @@ use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Auth;
 use Exception;
 
+/**
+ * @group Question Options
+ * @authenticated
+ *
+ * Manage individual question options and bulk option operations.
+ */
 class QuestionOptionController extends Controller
 {
     public function __construct()
@@ -16,9 +22,15 @@ class QuestionOptionController extends Controller
         $this->middleware('auth.api')->except(['index','show']);
         $this->middleware(\App\Http\Middleware\BlockGuestMiddleware::class)->only(['store', 'update', 'destroy']);
     }
-    // List all question options
+    
     public function index()
     {
+    /**
+     * List question options
+    * @unauthenticated
+     *
+     * @response 200 [{"question_option_id":"uuid","question_option_text":"..."}]
+     */
         try {
             $options = QuestionOption::with('question')->get();
             return response()->json($options, 200);
@@ -27,7 +39,14 @@ class QuestionOptionController extends Controller
         }
     }
 
-    // Show single option
+    
+    /**
+     * Show a single question option
+     *
+    * @unauthenticated
+     * @urlParam id string required Option UUID.
+     * @response 200 {"question_option_id":"uuid","question_option_text":"..."}
+     */
     public function show($id)
     {
         try {
@@ -38,7 +57,13 @@ class QuestionOptionController extends Controller
         }
     }
 
-    // Create option (only if user owns the question's run)
+    /**
+     * Create a question option
+     *
+     * @bodyParam question_id string required The question UUID this option belongs to.
+     * @bodyParam question_option_text string required The option text.
+     * @response 201 {"message":"Option created","option":{"question_option_id":"uuid","question_option_text":"Example"}}
+     */
     public function store(Request $request)
     {
         try {
@@ -67,7 +92,14 @@ class QuestionOptionController extends Controller
         }
     }
 
-    // Update option (only owner)
+    
+    /**
+     * Update a question option
+     *
+     * @urlParam id string required Option UUID.
+     * @bodyParam question_option_text string required New option text.
+     * @response 200 {"message":"Option updated","option":{"question_option_id":"uuid"}}
+     */
     public function update(Request $request, $id)
     {
         try {
@@ -95,7 +127,13 @@ class QuestionOptionController extends Controller
         }
     }
 
-    // Delete option (only owner)
+    
+    /**
+     * Delete a question option
+     *
+     * @urlParam id string required Option UUID.
+     * @response 200 {"message":"Option deleted"}
+     */
     public function destroy($id)
     {
         try {
@@ -115,6 +153,13 @@ class QuestionOptionController extends Controller
 
     // ---------------- Bulk Operations ----------------
 
+    /**
+     * Bulk create options for a question
+     *
+     * @bodyParam options array required Array of option objects with `question_option_text`.
+     * @bodyParam options.*.question_option_text string required Option text.
+     * @response 201 {"message":"Options created","options":[{"question_option_id":"uuid","question_option_text":"..."}]}
+     */
     public function bulkCreate(Request $request, $questionId)
     {
         try {
@@ -143,6 +188,12 @@ class QuestionOptionController extends Controller
         }
     }
 
+    /**
+     * Bulk update options for a question
+     *
+     * @bodyParam options array required Array of option objects including `question_option_id`.
+     * @response 200 {"message":"Options updated"}
+     */
     public function bulkUpdate(Request $request, $questionId)
     {
         try {
@@ -170,6 +221,12 @@ class QuestionOptionController extends Controller
         }
     }
 
+    /**
+     * Bulk delete options for a question
+     *
+     * @bodyParam option_ids array required Array of option UUIDs to delete.
+     * @response 200 {"message":"Options deleted"}
+     */
     public function bulkDelete(Request $request, $questionId)
     {
         try {

@@ -10,6 +10,12 @@ use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\DB;
 use Exception;
 
+/**
+ * @group Flags
+ * @authenticated
+ *
+ * Manage flags (map points) for runs. Supports single and bulk operations.
+ */
 class FlagController extends Controller
 {
     public function __construct()
@@ -18,10 +24,16 @@ class FlagController extends Controller
         $this->middleware(\App\Http\Middleware\BlockGuestMiddleware::class)->only(['store', 'update', 'destroy']);
     }
 
+    /**
+     * List flags (optionally filter by run_id)
+     *
+     * @unauthenticated
+     * @queryParam run_id string nullable Filter flags by run UUID. Example: "..."
+     * @response 200 [{"flag_id":"uuid","flag_number":1,"flag_lat":"51.5","flag_long":"-0.12"}]
+     */
     public function index(Request $request)
     {
         try {
-            // Eager-load related run, questions and their options so consumers (edit UI) get full data
             $query = Flag::with(['run','questions.options']);
             if ($request->has('run_id')) $query->where('run_id',$request->run_id);
             $flags = $query->get();
@@ -31,6 +43,13 @@ class FlagController extends Controller
         }
     }
 
+    /**
+     * Show a single flag
+     *
+     * @unauthenticated
+     * @urlParam id string required Flag UUID.
+     * @response 200 {"flag_id":"uuid","flag_number":1,"questions":[]}
+     */
     public function show($flag_id)
     {
         try {
@@ -43,6 +62,14 @@ class FlagController extends Controller
         }
     }
 
+    /**
+     * Create a single flag for a run
+     *
+     * @bodyParam run_id string required Run UUID the flag belongs to. Example: "..."
+     * @bodyParam flag_lat numeric required Latitude. Example: 51.5074
+     * @bodyParam flag_long numeric required Longitude. Example: -0.1278
+     * @response 201 {"message":"Flag created","flag":{"flag_id":"uuid","flag_number":1}}
+     */
     public function store(Request $request)
     {
         try {
@@ -82,6 +109,14 @@ class FlagController extends Controller
         }
     }
 
+    /**
+     * Update a flag
+     *
+     * @urlParam flag_id string required Flag UUID.
+     * @bodyParam flag_lat numeric nullable Latitude.
+     * @bodyParam flag_long numeric nullable Longitude.
+     * @response 200 {"message":"Flag updated","flag":{"flag_id":"uuid"}}
+     */
     public function update(Request $request, $flag_id)
     {
         try {
@@ -106,6 +141,12 @@ class FlagController extends Controller
         }
     }
 
+    /**
+     * Delete a flag
+     *
+     * @urlParam flag_id string required Flag UUID.
+     * @response 200 {"message":"Flag deleted"}
+     */
     public function destroy(Request $request, $flag_id)
     {
         try {
@@ -120,7 +161,13 @@ class FlagController extends Controller
         }
     }
 
-    // Bulk create for flags under a run (matches routes: POST /runs/{runId}/flags/bulk)
+    /**
+     *
+     * @bodyParam flags array required Array of flag objects containing `flag_lat` and `flag_long`.
+     * @bodyParam flags.*.flag_lat numeric required Latitude of the flag. Example: 51.5074
+     * @bodyParam flags.*.flag_long numeric required Longitude of the flag. Example: -0.1278
+     * @response 201 [ {"flag_id":"uuid","flag_number":1,"flag_lat":"51.5074","flag_long":"-0.1278"} ]
+     */
     public function bulkCreate(Request $request, $runId)
     {
         try {
@@ -143,8 +190,6 @@ class FlagController extends Controller
             // Create all flags in a transaction and assign sequential flag_numbers atomically
             $created = DB::transaction(function () use ($flagsData, $runId) {
                 // Lock the last row for this run and compute the starting flag_number.
-                // Avoid using aggregate with FOR UPDATE on Postgres by selecting the last
-                // row ordered by flag_number and locking it.
                 $last = Flag::where('run_id', $runId)->orderBy('flag_number', 'desc')->lockForUpdate()->first();
                 $next = $last ? ($last->flag_number + 1) : 1;
 
@@ -180,7 +225,12 @@ class FlagController extends Controller
         }
     }
 
-    // Bulk update for flags under a run (matches routes: PUT /runs/{runId}/flags/bulk)
+    /**
+     * Bulk update flags for a run
+     *
+     * @bodyParam flags array required Array of flag objects containing `flag_id` and updatable fields.
+     * @response 200 {"message":"Flags updated","flags":[{"flag_id":"uuid"}]}
+     */
     public function bulkUpdate(Request $request, $runId)
     {
         try {
@@ -212,7 +262,12 @@ class FlagController extends Controller
         }
     }
 
-    // Bulk delete for flags under a run (matches routes: DELETE /runs/{runId}/flags/bulk)
+    /**
+     * Bulk delete flags for a run
+     *
+     * @bodyParam flag_ids array required Array of flag UUIDs to delete.
+     * @response 200 {"message":"Flags deleted"}
+     */
     public function bulkDelete(Request $request, $runId)
     {
         try {

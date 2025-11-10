@@ -103,7 +103,7 @@ return [
     // How is your API authenticated? This information will be used in the displayed docs, generated examples and response calls.
     'auth' => [
         // Set this to true if ANY endpoints in your API use authentication.
-        'enabled' => false,
+        'enabled' => true,
 
         // Set this to true if your API should be authenticated by default. If so, you must also set `enabled` (above) to true.
         // You can then use @unauthenticated or @authenticated on individual endpoints to change their status from the default.
@@ -117,7 +117,8 @@ return [
 
         // The value of the parameter to be used by Scribe to authenticate response calls.
         // This will NOT be included in the generated documentation. If empty, Scribe will use a random value.
-        'use_value' => env('SCRIBE_AUTH_KEY'),
+        // Provide a sensible default placeholder so "Try it out" examples include a usable token.
+        'use_value' => env('SCRIBE_AUTH_KEY', 'scribe-test-token-PLACEHOLDER'),
 
         // Placeholder your users will see for the auth parameter in the example requests.
         // Set this to null if you want Scribe to use a random value as placeholder instead.
@@ -199,7 +200,10 @@ return [
         // With API resources and transformers, Scribe tries to generate example models to use in your API responses.
         // By default, Scribe will try the model's factory, and if that fails, try fetching the first from the database.
         // You can reorder or remove strategies here.
-        'models_source' => ['factoryCreate', 'factoryMake', 'databaseFirst'],
+        // Order of strategies used to produce example models. Put factoryCreate first for deterministic
+        // examples generated via model factories (faker_seed is set above). Fallback to databaseFirst
+        // then factoryMake if needed.
+        'models_source' => ['factoryCreate', 'databaseFirst', 'factoryMake'],
     ],
 
     // The strategies Scribe will use to extract information about your routes at each stage.

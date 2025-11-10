@@ -97,6 +97,13 @@ class AuthController extends Controller
         return response()->json(['message' => 'Email verified and account created successfully']);
     }
 
+    /**
+     * Log a user in and return a JWT token
+     *
+     * @bodyParam email string required User email. Example: "user@example.com"
+     * @bodyParam password string required User password.
+     * @response 200 {"token":"jwt-token","user":{"user_id":"uuid","user_name":"bob"}}
+     */
     public function login(Request $request)
     {
         // Validate input
@@ -313,9 +320,6 @@ class AuthController extends Controller
         return response()->json(['message' => 'Guest session ended successfully']);
     }
 
-    /**
-     * Work in progress
-     */
     public function upgradeGuest(Request $request)
     {
         $token = $request->bearerToken() ?? $request->input('guest_token');

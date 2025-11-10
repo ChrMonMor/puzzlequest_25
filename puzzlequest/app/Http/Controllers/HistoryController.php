@@ -10,6 +10,12 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Exception;
 
+/**
+ * @group History
+ * @authenticated
+ *
+ * Endpoints for starting/ending runs and marking flag progress for a user's history.
+ */
 class HistoryController extends Controller
 {
     public function __construct()
@@ -18,9 +24,6 @@ class HistoryController extends Controller
         $this->middleware(\App\Http\Middleware\BlockGuestMiddleware::class)->only(['destroy']);
     }
 
-    /**
-     * Get current actor: either authenticated user or guest token
-     */
     protected function getActor(Request $request)
     {
         $user = auth('api')->user();
@@ -37,7 +40,9 @@ class HistoryController extends Controller
     }
 
     /**
-     * Start a new run history for the actor (user or guest)
+     * 
+     * @bodyParam run_id string required Run UUID (path param also present).
+     * @response 201 {"message":"History started","history":{"history_id":"uuid","run_id":"..."}}
      */
     public function startRun(Request $request, $runId)
     {
@@ -107,7 +112,8 @@ class HistoryController extends Controller
     }
 
     /**
-     * Mark the run as finished.
+     * @urlParam historyId string required History UUID.
+     * @response 200 {"message":"Run ended successfully","history":{"history_id":"uuid"}}
      */
     public function endRun(Request $request, $historyId)
     {
@@ -137,7 +143,8 @@ class HistoryController extends Controller
     }
 
     /**
-     * Update a flag as reached within a run history.
+     *
+     * @response 200 {"message":"Flag marked reached","history_flag":{"history_flag_id":"uuid","history_id":"...","flag_id":"..."}}
      */
     public function markFlagReached(Request $request, $historyId, $flagId)
     {
@@ -174,7 +181,7 @@ class HistoryController extends Controller
     }
 
     /**
-     * Get all histories for the actor (user or guest)
+     * @response 200 [{"history_id":"uuid","run_id":"..."}]
      */
     public function index(Request $request)
     {
@@ -192,7 +199,8 @@ class HistoryController extends Controller
     }
 
     /**
-     * Show one history record with all flags
+     * @urlParam historyId string required History UUID.
+     * @response 200 {"history_id":"uuid","run_id":"...","flags":[]}
      */
     public function show(Request $request, $historyId)
     {

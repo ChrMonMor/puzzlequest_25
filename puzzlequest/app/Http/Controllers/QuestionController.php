@@ -11,6 +11,12 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Exception;
 
+/**
+ * @group Questions
+ * @authenticated
+ *
+ * Manage questions and their options for runs/flags. Supports bulk operations and answer selection.
+ */
 class QuestionController extends Controller
 {
     public function __construct()
@@ -18,7 +24,13 @@ class QuestionController extends Controller
         $this->middleware('auth.api')->except(['index','show']);
         $this->middleware(\App\Http\Middleware\BlockGuestMiddleware::class)->only(['store', 'storeWithAnswer', 'update', 'destroy']);
     }
-    // List all questions (with options, type, run, flag)
+    
+    /**
+     * List all questions
+     * @unauthenticated
+     *
+     * @response 200 [{"question_id":"uuid","question_text":"..."}]
+     */
     public function index()
     {
         try {
@@ -29,7 +41,14 @@ class QuestionController extends Controller
         }
     }
 
-    // Show single question
+    
+    /**
+     * Show a single question
+     *
+    * @unauthenticated
+     * @urlParam id string required Question UUID.
+     * @response 200 {"question_id":"uuid","question_text":"...","options":[]}
+     */
     public function show($id)
     {
         try {
@@ -41,6 +60,15 @@ class QuestionController extends Controller
     }
 
     // Create a question (linked to a run)
+    /**
+     *
+     * @bodyParam run_id string required Run UUID. Example: "..."
+     * @bodyParam flag_id string nullable Flag UUID if tied to a specific flag.
+     * @bodyParam question_type integer required Question type id. Example: 1
+     * @bodyParam question_text string required The question text.
+     * @bodyParam options array nullable Array of options: objects with `question_option_text` and optional `is_answer`.
+     * @response 201 {"message":"Question created successfully","question":{"question_id":"uuid","question_text":"What is...","options":[{"question_option_id":"uuid"}]}}
+     */
     public function store(Request $request)
     {
         try {
@@ -123,9 +151,14 @@ class QuestionController extends Controller
     }
 
 
-
-
-    // Update question (only owner of run)
+    /**
+     * Update a question
+     *
+     * @urlParam id string required Question UUID.
+     * @bodyParam question_text string nullable New question text.
+     * @bodyParam question_answer string nullable New answer reference.
+     * @response 200 {"message":"Question updated","question":{"question_id":"uuid"}}
+     */
     public function update(Request $request, $id)
     {
         try {
@@ -156,7 +189,13 @@ class QuestionController extends Controller
         }
     }
 
-    // Delete question (only owner)
+    
+    /**
+     * Delete a question
+     *
+     * @urlParam id string required Question UUID.
+     * @response 200 {"message":"Question deleted"}
+     */
     public function destroy($id)
     {
         try {
@@ -176,6 +215,16 @@ class QuestionController extends Controller
 
     // ---------------- Bulk Operations ----------------
 
+    /**
+     * Bulk create questions for a run
+     *
+     * @bodyParam questions array required Array of question objects.
+     * @bodyParam questions.*.flag_id string nullable Flag UUID if tied to a flag.
+     * @bodyParam questions.*.question_type integer required Question type id.
+     * @bodyParam questions.*.question_text string required The question text.
+     * @bodyParam questions.*.options array nullable Array of option objects with `question_option_text` and optional `is_answer`.
+     * @response 201 {"message":"Questions created","questions":[{"question_id":"uuid","question_text":"..."}]}
+     */
     public function bulkCreate(Request $request, $runId)
     {
         try {
@@ -259,6 +308,13 @@ class QuestionController extends Controller
         }
     }
 
+    /**
+     * Create a question with options and an explicit answer
+     *
+     * @bodyParam run_id string required Run UUID.
+     * @bodyParam options array required Array of option objects with `question_option_text`.
+     * @response 201 {"message":"Question with options created","question":{"question_id":"uuid"}}
+     */
     public function storeWithAnswer(Request $request)
     {
         try {
@@ -323,6 +379,12 @@ class QuestionController extends Controller
         }
     }
 
+    /**
+     * Bulk update questions for a run
+     *
+     * @bodyParam questions array required Array of question objects with `question_id` and fields to update.
+     * @response 200 {"message":"Questions updated"}
+     */
     public function bulkUpdate(Request $request, $runId)
     {
         try {
@@ -350,6 +412,12 @@ class QuestionController extends Controller
         }
     }
 
+    /**
+     * Bulk delete questions for a run
+     *
+     * @bodyParam question_ids array required Array of question UUIDs.
+     * @response 200 {"message":"Deleted X questions"}
+     */
     public function bulkDelete(Request $request, $runId)
     {
         try {

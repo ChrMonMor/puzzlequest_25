@@ -34,6 +34,12 @@ class RunTypeController extends Controller
         }
     }
 
+    /**
+     * Create a run type
+     *
+     * @bodyParam run_type_name string required The name of the run type. Example: "Public"
+     * @response 201 {"message":"Run type created","run_type":{"run_type_id":1,"run_type_name":"Public"}}
+     */
     public function store(Request $request)
     {
         try {

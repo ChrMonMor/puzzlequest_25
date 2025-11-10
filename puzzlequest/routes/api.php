@@ -60,7 +60,6 @@ Route::post('/reset-password', [AuthController::class, 'resetPassword']);
 // -------------------- RUN ROUTES --------------------
 Route::prefix('runs')->group(function () {
     Route::get('/', [RunController::class, 'index']);          // Public: paginated list of runs
-    // Lookup by pin (fast single-row lookup)
     Route::get('pin/{pin}', [RunController::class, 'findByPin']);
     Route::get('{id}', [RunController::class, 'show']);       // Public: show single run
 

@@ -12,6 +12,12 @@ use Illuminate\Support\Str;
 use Exception;
 use Illuminate\Database\QueryException;
 
+/**
+ * @group Runs
+ * @authenticated
+ *
+ * APIs for creating, listing and managing puzzle runs.
+ */
 class RunController extends Controller
 {
     public function __construct()
@@ -19,7 +25,16 @@ class RunController extends Controller
         $this->middleware('auth.api')->except(['index','show']);
         $this->middleware(\App\Http\Middleware\BlockGuestMiddleware::class)->only(['store', 'update', 'destroy']);
     }
-    // List runs with optional server-side search & pagination
+    
+    /**
+     * List runs with optional server-side search & pagination
+     *
+    * @unauthenticated
+    * @queryParam q string optional Search term to filter runs by title, pin, or owner. Example: "downtown"
+     * @queryParam page integer optional Page number. Example: 1
+     * @queryParam per_page integer optional Results per page. Example: 12
+     * @response 200 {"data":[{"run_id":"uuid","run_title":"Example"}],"current_page":1}
+     */
     public function index(Request $request)
     {
         try {
@@ -47,6 +62,13 @@ class RunController extends Controller
     }
 
     // Find a run by its pin code
+    /**
+     * Find a run by its pin code
+     *
+    * @unauthenticated
+    * @urlParam pin string required The 4-8 character run pin. Example: "ABC123"
+     * @response 200 {"run_id":"uuid","run_title":"Downtown Puzzle Run","run_pin":"ABC123"}
+     */
     public function findByPin($pin)
     {
         try {
@@ -62,6 +84,13 @@ class RunController extends Controller
     }
 
     // Show single run
+    /**
+     * Show single run with nested relationships
+     *
+    * @unauthenticated
+    * @urlParam id string required Run UUID.
+    * @response 200 {"run_id":"uuid","run_title":"Example","flags":[],"questions":[]}
+     */
     public function show($id)
     {
         try {
@@ -79,6 +108,18 @@ class RunController extends Controller
     }
 
     // Create new run
+    /**
+     * Create a new run
+     *
+     * @bodyParam run_type integer required The id of the run type. Example: 1
+     * @bodyParam run_title string required The title of the run. Example: "Downtown Puzzle Run"
+     * @bodyParam run_description string nullable Optional description. Example: "A short urban puzzle"
+     * @bodyParam run_pin string nullable Optional 6-char pin to assign to the run. Example: "AB12CD"
+     * @response 201 {
+     *  "message": "Run created",
+     *  "run": {"run_id":"uuid","run_pin":"ABC123","run_title":"Downtown Puzzle Run"}
+     * }
+     */
     public function store(Request $request)
     {
         try {
@@ -109,7 +150,6 @@ class RunController extends Controller
             ]));
 
             // If no run_pin was provided, generate one and try to save it atomically.
-            // Use a retry loop that catches DB unique-constraint violations so concurrent
             // requests won't create duplicate pins (race condition between exists() and save()).
             if (empty($run->run_pin)) {
                 $attempts = 0;
@@ -155,6 +195,14 @@ class RunController extends Controller
     }
 
     // Update run (only owner)
+    /**
+     * Update a run (owner only)
+     *
+     * @urlParam id string required Run UUID.
+     * @bodyParam run_title string nullable The new title. Example: "New Title"
+     * @bodyParam run_description string nullable Optional description.
+     * @response 200 {"message":"Run updated","run":{"run_id":"uuid","run_title":"New Title"}}
+     */
     public function update(Request $request, $id)
     {
         try {
@@ -205,6 +253,12 @@ class RunController extends Controller
     }
 
     // Delete run (only owner)
+    /**
+     * Delete a run (owner only)
+     *
+     * @urlParam id string required Run UUID.
+     * @response 200 {"message":"Run deleted"}
+     */
     public function destroy($id)
     {
         try {
@@ -227,7 +281,14 @@ class RunController extends Controller
         }
     }
 
-    // Generate a unique 6-character alphanumeric pin for a run and save it
+    /**
+     *
+     * @response 200 {
+     *  "message": "Pin generated",
+     *  "pin": "ABC123",
+     *  "run": {"run_id":"uuid","run_pin":"ABC123"}
+     * }
+     */
     public function generatePin($id)
     {
         try {
@@ -266,7 +327,4 @@ class RunController extends Controller
             return response()->json(['error' => 'Failed to generate pin', 'details' => $e->getMessage()], 500);
         }
     }
-
-    // Bulk operations for flags and questions are implemented in their respective controllers
-    // (FlagController and QuestionController) and the routes point to those implementations.
 }

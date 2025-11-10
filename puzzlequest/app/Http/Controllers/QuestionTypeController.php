@@ -34,6 +34,12 @@ class QuestionTypeController extends Controller
         }
     }
 
+    /**
+     * Create a question type
+     *
+     * @bodyParam question_type_name string required Name of the question type. Example: "Multiple Choice"
+     * @response 201 {"message":"Question type created","question_type":{"question_type_id":1,"question_type_name":"Multiple Choice"}}
+     */
     public function store(Request $request)
     {
         try {
