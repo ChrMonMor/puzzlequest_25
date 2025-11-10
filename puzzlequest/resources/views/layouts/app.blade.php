@@ -50,6 +50,10 @@
         .flash { padding: .5rem; margin-bottom: .75rem; border-radius: 4px; }
         .flash-success { background: rgba(102,178,111,0.08); border:1px solid rgba(102,178,111,0.25); }
         .flash-error { background: rgba(226,88,88,0.08); border:1px solid rgba(226,88,88,0.25); }
+        
+        /* Links */
+        a:visited { color: var(--link); }
+        a:link { color: var(--link); }
 
         /* header/footer */
         header.site-header { display:flex; align-items:center; justify-content:space-between; gap:1rem; padding: .5rem 0 }
@@ -64,7 +68,7 @@
         .dark .theme-toggle { border-color: rgba(255,255,255,0.06); }
         /* Buttons */
         .btn { display:inline-block; padding:.45rem .75rem; border-radius:6px; border:1px solid transparent; cursor:pointer; font-weight:600 }
-        .btn-primary { background:var(--trail-blue); color:#fff; border-color:rgba(0,0,0,0.04) }
+        .btn-primary { background:var(--trail-blue); color:#fff !important; border-color:rgba(0,0,0,0.04) }
         .dark .btn-primary { background:var(--trail-blue); }
         .btn-secondary { background:transparent; color:var(--trail-blue); border:1px solid rgba(0,0,0,0.06) }
         .dark .btn-secondary { border-color: rgba(255,255,255,0.06); }
