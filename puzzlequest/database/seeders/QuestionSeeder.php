@@ -29,7 +29,7 @@ class QuestionSeeder extends Seeder
 
         // Create a variable number of questions per flag with several options (scaled)
         foreach ($flags as $flag) {
-            $numQuestions = rand(1, max(1, 3 * $scale));
+            $numQuestions = 1;
             for ($q = 1; $q <= $numQuestions; $q++) {
                 $questionType = $questionTypes->random();
                 $question = Question::create([

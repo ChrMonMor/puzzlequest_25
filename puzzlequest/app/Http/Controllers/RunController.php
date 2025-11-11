@@ -53,7 +53,12 @@ class RunController extends Controller
                 });
             }
 
-            $runs = $query->orderByDesc('run_added')->paginate($perPage);
+            $runs = $query->orderByDesc('run_added');
+            if ($request->has('page')) {
+                $runs = $runs->paginate($perPage);
+            } else {
+                $runs = $runs->get();
+            }
 
             return response()->json($runs, 200);
         } catch (Exception $e) {
