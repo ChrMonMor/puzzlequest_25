@@ -14,6 +14,7 @@ return new class extends Migration
         Schema::create('run_types', function (Blueprint $table) {
             $table->id('run_type_id')->primary();
             $table->string('run_type_name', 255);
+            $table->string('run_type_icon',255);
         });
     }
 

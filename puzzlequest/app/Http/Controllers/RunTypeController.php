@@ -45,10 +45,11 @@ class RunTypeController extends Controller
         try {
             $validator = Validator::make($request->all(),[
                 'run_type_name'=>'required|string|unique:run_types,run_type_name',
+                'run_type_icon'=> 'required|string|unique:run_types,run_type_icon',
             ]);
             if ($validator->fails()) return response()->json(['errors'=>$validator->errors()],422);
 
-            $runType = RunType::create($request->only(['run_type_name']));
+            $runType = RunType::create($request->only(['run_type_name', 'run_type_icon']));
             $runType->load('runs');
             return response()->json(['message'=>'Run type created','run_type'=>$runType],201);
         } catch (Exception $e) {
@@ -56,16 +57,17 @@ class RunTypeController extends Controller
         }
     }
 
-    public function update(Request $request,$id)
+    public function update(Request $request, $id)
     {
         try {
             $runType = RunType::findOrFail($id);
             $validator = Validator::make($request->all(),[
                 'run_type_name'=>'required|string|unique:run_types,run_type_name,'.$id.',run_type_id',
+                'run_type_icon'=> 'required|string|unique:run_types,run_type_icon,'.$id.',run_type_id',
             ]);
             if ($validator->fails()) return response()->json(['errors'=>$validator->errors()],422);
 
-            $runType->update($request->only(['run_type_name']));
+            $runType->update($request->only(['run_type_name', 'run_type_icon']));
             $runType->load('runs');
             return response()->json(['message'=>'Run type updated','run_type'=>$runType],200);
         } catch (Exception $e) {

@@ -83,7 +83,7 @@ class AuthController extends Controller
                 'user_password' => $cached['password_hash'],
                 'user_name' => $cached['username'],
                 'user_verified' => true,
-                'user_img' => null,
+                'user_img' => asset('images/androgynousDefault.png'),
                 'user_email_verified_at' => now(),
             ]);
         } else {

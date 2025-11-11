@@ -14,7 +14,7 @@ class RunType extends Model
     public $incrementing = true;
     public $timestamps = false;
 
-    protected $fillable = ['run_type_name'];
+    protected $fillable = ['run_type_name', 'run_type_icon'];
 
     public function runs()
     {
