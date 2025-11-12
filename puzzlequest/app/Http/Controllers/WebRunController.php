@@ -43,7 +43,7 @@ class WebRunController extends Controller
             $runs = Run::where('user_id', $user->user_id)->orderBy('run_added', 'desc')->get();
         }
 
-    return view('runs.index', ['runs' => $runs, 'title' => 'My Runs', 'onlyMine' => true]);
+        return view('runs.index', ['runs' => $runs, 'title' => 'My Runs', 'onlyMine' => true]);
     }
 
     /**

@@ -35,10 +35,6 @@ Route::prefix('guests')->group(function () {
 });
 
 // -------------------- USER ROUTES --------------------
-Route::get('/user', function (Request $request) {
-    return $request->user();
-})->middleware('auth:sanctum');
-
 Route::post('/register', [AuthController::class, 'register']);
 Route::get('/verify-email', [AuthController::class, 'verifyEmail']);
 Route::post('/login', [AuthController::class, 'login']);
@@ -67,6 +63,7 @@ Route::prefix('runs')->group(function () {
         Route::post('/', [RunController::class, 'store']);    // Create run
         Route::put('{id}', [RunController::class, 'update']); // Update run
         Route::delete('{id}', [RunController::class, 'destroy']); // Delete run
+        Route::post('/mine', [RunController::class, 'myRuns']);
 
     // Generate a unique 6-char alphanumeric pin for a run
     Route::post('{id}/generate-pin', [RunController::class, 'generatePin']);

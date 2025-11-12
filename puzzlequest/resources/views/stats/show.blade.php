@@ -12,8 +12,6 @@
         <div class="muted">Total plays: {{ $histories->count() }}</div>
     </div>
 
-    {{-- Map removed from this view; maps shown on run-level stats instead. --}}
-
     <div class="card" style="margin-top:1rem; padding:0; overflow:auto">
         <table class="table-auto w-full mt-0">
         <thead>

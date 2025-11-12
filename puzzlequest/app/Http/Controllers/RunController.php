@@ -29,8 +29,8 @@ class RunController extends Controller
     /**
      * List runs with optional server-side search & pagination
      *
-    * @unauthenticated
-    * @queryParam q string optional Search term to filter runs by title, pin, or owner. Example: "downtown"
+     * @unauthenticated
+     * @queryParam q string optional Search term to filter runs by title, pin, or owner. Example: "downtown"
      * @queryParam page integer optional Page number. Example: 1
      * @queryParam per_page integer optional Results per page. Example: 12
      * @response 200 {"data":[{"run_id":"uuid","run_title":"Example"}],"current_page":1}
@@ -66,7 +66,6 @@ class RunController extends Controller
         }
     }
 
-    // Find a run by its pin code
     /**
      * Find a run by its pin code
      *
@@ -331,5 +330,24 @@ class RunController extends Controller
         } catch (Exception $e) {
             return response()->json(['error' => 'Failed to generate pin', 'details' => $e->getMessage()], 500);
         }
+    }
+    
+    /**
+     * get all runs (owner only)
+     *
+     * @response 200 {"message":"Runs retrieved","run":{"run_id":"uuid","run_title":"New Title"}}
+     */
+    public function myRuns()
+    {
+        // Resolve the current user: prefer the session/web guard, but fall back to a JWT stored in session
+        $user = auth('api')->user();
+        if (!$user) { return response()->json(['error' => 'Unauthorized. Please log in.'], 401);}
+
+        $runs = collect();
+        if ($user) {
+            $runs = Run::with('runType')->where('user_id', $user->user_id)->orderBy('run_added', 'desc')->get();
+        }
+
+        return response()->json(['message' => 'Runs retrieved', 'runs' => $runs, ]);
     }
 }

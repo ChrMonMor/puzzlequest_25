@@ -25,8 +25,8 @@ class FlagSeeder extends Seeder
         // For each run, create a small cluster of flags (scaled) around a random center to make realistic routes
         foreach ($runs as $run) {
             // choose a random center point for this run
-            $centerLat = mt_rand(-9000, 9000) / 100; // -90..90
-            $centerLng = mt_rand(-18000, 18000) / 100; // -180..180
+            $centerLat = mt_rand(-5000, 5000) / 100;
+            $centerLng = mt_rand(-5000, 5000) / 100;
             $min = max(3, 5 * $scale);
             $max = max($min, 8 * $scale);
             $count = rand($min, $max);
