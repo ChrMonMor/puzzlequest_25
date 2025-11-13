@@ -178,7 +178,7 @@ class AuthController extends Controller
         }
 
         if ($request->has('image')) {
-            $path =  $request->input('user_img');
+            $path =  $request->input('image');
             $user->user_img = $path;
         }
 
