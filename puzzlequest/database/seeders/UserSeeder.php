@@ -56,6 +56,7 @@ class UserSeeder extends Seeder
                 'user_email' => $name . '@example.com',
                 'user_password' => Hash::make('password123'),
                 'user_verified' => $faker->boolean(70),
+                'user_img'=> 'androgynousDefault.png',
             ]);
         }
     }
