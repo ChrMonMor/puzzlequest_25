@@ -142,7 +142,7 @@ class AuthController extends Controller
             'message' => 'Login successful',
             'token'   => $token,
             'token_type' => 'bearer',
-            'expires_in' => (int) JWTAuth::factory()->getTTL() * 60 * 24
+            'expires_in' => (int) JWTAuth::factory()->getTTL() * 60
         ]);
 
     }

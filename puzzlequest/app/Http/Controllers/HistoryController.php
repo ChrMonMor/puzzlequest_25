@@ -133,7 +133,6 @@ class HistoryController extends Controller
 
             $history->update([
                 'history_end' => now(),
-                'history_run_update' => now(),
             ]);
 
             return response()->json(['message' => 'Run ended successfully', 'history' => $history]);
@@ -172,8 +171,6 @@ class HistoryController extends Controller
                 'history_flag_distance' => $request->input('history_flag_distance'),
             ]);
 
-            $history->update(['history_run_update' => now()]);
-
             return response()->json(['message' => 'Flag marked as reached', 'flag' => $flag]);
         } catch (Exception $e) {
             return response()->json(['error' => 'Failed to mark flag', 'details' => $e->getMessage()], 500);
@@ -182,38 +179,20 @@ class HistoryController extends Controller
 
     /**
      * @response 200 [{"history_id":"uuid","run_id":"..."}]
-     * @queryParam page integer optional Page number. Example: 1
-     * @queryParam per_page integer optional Results per page. Example: 12
      */
     public function index(Request $request)
     {
-        try {
-            
-            $actor = $this->getActor($request);
-            if (!$actor) {
-                return response()->json(['error' => 'Unauthorized'], 401);
-            }
-            $perPage = max(1, (int) $request->query('per_page', 12));
-
-            if ($actor['type'] === 'guest') {
-                return response()->json([], 200);
-            }
-
-            $histories = History::with(relations: ['run', 'flags'])
-                ->where('user_id', $actor['id'])
-                ->orderByDesc('history_start');
-
-
-            if ($request->has('page')) {
-                    $histories = $histories->paginate($perPage);
-            } else {
-                    $histories = $histories->get();
-            }
-
-            return response()->json($histories, 200);
-        } catch (Exception $e) {
-            return response()->json(['error' => 'Failed to fetch runs', 'details' => $e->getMessage()], 500);
+        $actor = $this->getActor($request);
+        if (!$actor) {
+            return response()->json(['error' => 'Unauthorized'], 401);
         }
+
+        $histories = History::with(['run', 'flags'])
+            ->where('user_id', $actor['id'])
+            ->orderByDesc('history_start')
+            ->get();
+
+        return response()->json($histories);
     }
 
     /**
