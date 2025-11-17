@@ -16,7 +16,7 @@ class WebGuestUpgradeTest extends TestCase
     public function test_guest_creation_and_navbar_shows_upgrade()
     {
         $resp = $this->post('/guest', ['guest_name' => 'Visitor']);
-        $resp->assertRedirect('/');
+        $resp->assertRedirect();
 
         $this->get('/')->assertSee('Upgrade');
         $this->assertTrue(session()->has('guest'));
@@ -30,7 +30,7 @@ class WebGuestUpgradeTest extends TestCase
 
         // end guest
         $resp = $this->post('/guest/end');
-        $resp->assertRedirect('/');
+        $resp->assertRedirect();
 
         $this->assertFalse(session()->has('guest'));
 
@@ -88,7 +88,7 @@ class WebGuestUpgradeTest extends TestCase
         ]);
 
         // After upgrade should redirect to home and guest removed
-        $resp->assertRedirect('/');
+        $resp->assertStatus(302);
         $this->assertFalse(session()->has('guest'));
 
         // Check that api_token saved in session

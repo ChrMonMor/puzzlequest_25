@@ -12,7 +12,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('history_flags', function (Blueprint $table) {
-            $table->id('history_flag_id')->primary();
+            $table->id('history_flag_id');
             $table->uuid('history_id');
             $table->timestamp('history_flag_reached')->nullable();
             $table->double('history_flag_long')->nullable();

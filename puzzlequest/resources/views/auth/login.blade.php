@@ -19,6 +19,10 @@
         </div>
     </form>
 
+    <p style="margin-top: 1rem;">
+        <a href="{{ route('password.request') }}" class="muted" style="text-decoration: underline;">Forgot your password?</a>
+    </p>
+
     <p>If you don't want to create an account, you can <a href="{{ route('guest') }}">continue as a guest</a>.</p>
 
 @endsection

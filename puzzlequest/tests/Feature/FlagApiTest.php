@@ -61,7 +61,8 @@ class FlagApiTest extends ApiTestCase
 
         $response = $this->withToken()->deleteJson("/api/runs/{$run->run_id}/flags/bulk", ['ids' => $ids]);
 
-        $response->assertStatus(200);
+        $response->assertStatus(200)
+                 ->assertJson(['message' => 'Flags deleted']);
 
         foreach ($ids as $id) {
             $this->assertDatabaseMissing('flags', ['flag_id' => $id]);

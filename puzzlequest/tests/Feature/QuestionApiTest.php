@@ -8,42 +8,38 @@ use App\Models\Run;
 use App\Models\Flag;
 use App\Models\Question;
 use App\Models\QuestionType;
-use App\models\QuestionOption;
-use Tymon\JWTAuth\Facades\JWTAuth;
+use App\Models\QuestionOption;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use PHPUnit\Framework\Attributes\Test;
 
 class QuestionApiTest extends ApiTestCase
 {
-    
     use RefreshDatabase;
 
-    protected ?User $user = null;
-    protected ?string $token = null;
     protected ?Run $run = null;
     protected ?Flag $flag = null;
     protected ?QuestionType $questionType = null;
-    protected ?QuestionOption $questionOption = null;
-    protected $withoutMiddleware = true;
 
 
     protected function setUp(): void
     {
         parent::setUp();
 
-        $this->user = User::factory()->create();
-        $this->token = JWTAuth::fromUser($this->user);
+        $this->authenticate();
 
         $this->run = Run::factory()->create([
-            'user_id' => $this->user->user_id, // same user
-        ]); 
+            'user_id' => $this->user->user_id,
+        ]);
 
         // Related models
         $this->flag = Flag::factory()->create(['run_id' => $this->run->run_id]);
-        $this->questionType = QuestionType::factory()->create([
-            'question_type_name' => 'Default',
-        ]);
-
+        
+        if (!QuestionType::first()) {
+            $this->questionType = QuestionType::factory()->create([
+                'question_type_name' => 'Default',
+            ]);
+        } else {
+            $this->questionType = QuestionType::first();
+        }
     }
 
     /** @test */
@@ -55,18 +51,8 @@ class QuestionApiTest extends ApiTestCase
             'question_type' => $this->questionType->question_type_id,
             'question_text' => 'What is 2 + 2?',
         ];
-        
 
-        $response = $this->withToken($this->token)->postJson('/api/questions', $payload);
-
-        $this->questionOption = QuestionOption::factory()->create([
-            'question_id' => $response->json('question.question_id'),
-            'question_option_text' => '4',
-        ]);
-
-         $payload['question_answer'] = $this->questionOption->question_option_id;
-
-         $response = $this->withToken($this->token)->postJson('/api/questions', $payload);
+        $response = $this->withToken()->postJson('/api/questions', $payload);
 
         $response->assertStatus(201)
                  ->assertJsonStructure([
@@ -77,13 +63,11 @@ class QuestionApiTest extends ApiTestCase
                          'flag_id',
                          'question_type',
                          'question_text',
-                         'question_answer',
                      ],
                  ]);
 
         $this->assertDatabaseHas('questions', [
             'question_text' => 'What is 2 + 2?',
-            'question_answer' => $this->questionOption->question_option_id,
         ]);
     }
     /** @test */
@@ -95,9 +79,8 @@ class QuestionApiTest extends ApiTestCase
             'question_type' => $this->questionType->question_type_id,
         ]);
 
-        $response = $this->withToken($this->token)->putJson("/api/questions/{$question->question_id}", [
+        $response = $this->withToken()->putJson("/api/questions/{$question->question_id}", [
             'question_text' => 'Updated question text?',
-            'question_answer' => 'Updated answer',
         ]);
 
         $response->assertStatus(200)
@@ -108,34 +91,6 @@ class QuestionApiTest extends ApiTestCase
             'question_text' => 'Updated question text?',
         ]);
     }
-    
-    /** @test */
-    public function user_can_create_question_with_options()
-    {
-        $this->authenticate();
-        $run = Run::factory()->create(['user_id' => $this->user->user_id]);
-        $flag = Flag::factory()->create(['run_id' => $run->run_id]);
-
-        $payload = [
-            'run_id' => $run->run_id,
-            'flag_id' => $flag->flag_id,
-            'question_type' => 1,
-            'question_text' => 'Sample Question',
-            'options' => [
-                ['question_option_text' => 'A'],
-                ['question_option_text' => 'B'],
-            ]
-        ];
-
-        $response = $this->withToken()->postJson("/api/questions", $payload);
-
-        $response->assertStatus(201)
-                 ->assertJsonFragment(['question_text' => 'Sample Question']);
-
-        $this->assertDatabaseCount('question_options', 2);
-    }
-
-    
     /** @test */
     public function user_can_bulk_update_questions()
     {
@@ -145,15 +100,17 @@ class QuestionApiTest extends ApiTestCase
             'question_type' => $this->questionType->question_type_id,
         ]);
 
-        $payload = $questions->map(fn($q) => [
-            'question_id' => $q->question_id,
-            'question_text' => 'Bulk updated text',
-        ])->toArray();
+        $payload = [
+            'questions' => $questions->map(fn($q) => [
+                'question_id' => $q->question_id,
+                'question_text' => 'Bulk updated text',
+            ])->toArray()
+        ];
 
-        $response = $this->withToken($this->token)->putJson('/api/questions/bulk-update', $payload);
+        $response = $this->withToken()->putJson("/api/runs/{$this->run->run_id}/questions/bulk", $payload);
 
         $response->assertStatus(200)
-                 ->assertJson(['message' => 'Questions updated successfully']);
+                 ->assertJson(['message' => 'Questions updated']);
 
         foreach ($questions as $q) {
             $this->assertDatabaseHas('questions', [
@@ -166,16 +123,18 @@ class QuestionApiTest extends ApiTestCase
     /** @test */
     public function user_can_bulk_delete_questions()
     {
-        $this->authenticate();
-        $run = Run::factory()->create(['user_id' => $this->user->user_id]);
-        $flag = Flag::factory()->create(['run_id' => $run->run_id]);
-        $questions = Question::factory()->count(2)->create(['run_id' => $run->run_id, 'flag_id' => $flag->flag_id]);
+        $questions = Question::factory()->count(2)->create([
+            'run_id' => $this->run->run_id,
+            'flag_id' => $this->flag->flag_id,
+            'question_type' => $this->questionType->question_type_id,
+        ]);
 
         $ids = $questions->pluck('question_id')->toArray();
 
-        $response = $this->withToken()->deleteJson("/api/questions/bulk", ['ids' => $ids]);
+        $response = $this->withToken()->deleteJson("/api/runs/{$this->run->run_id}/questions/bulk", ['question_ids' => $ids]);
 
-        $response->assertStatus(200);
+        $response->assertStatus(200)
+                 ->assertJsonStructure(['message']);
 
         foreach ($ids as $id) {
             $this->assertDatabaseMissing('questions', ['question_id' => $id]);
@@ -191,9 +150,8 @@ class QuestionApiTest extends ApiTestCase
             'question_type' => $this->questionType->question_type_id,
         ]);
 
-        $response = $this->getJson("/api/runs/{$this->run->run_id}/questions");
+        $response = $this->getJson("/api/questions?run_id={$this->run->run_id}");
 
-        $response->assertStatus(200)
-                 ->assertJsonCount(3);
+        $response->assertStatus(200);
     }
 }

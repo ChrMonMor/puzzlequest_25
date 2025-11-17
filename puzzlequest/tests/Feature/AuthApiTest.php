@@ -22,10 +22,15 @@ class AuthApiTest extends TestCase
         $resp = $this->postJson('/api/register', $payload);
 
         $resp->assertStatus(200);
-        $this->assertDatabaseHas('users', [
+        
+        // User should NOT be in database yet - only after email verification
+        $this->assertDatabaseMissing('users', [
             'user_email' => 'tester@example.com',
-            'user_name' => 'tester',
         ]);
+        
+        // Verification token should be stored in cache
+        $cached = \Illuminate\Support\Facades\Cache::get('verify_tester@example.com');
+        $this->assertNotEmpty($cached, 'Expected verification token in cache after registration');
     }
 
     public function test_login_returns_token_for_verified_user()

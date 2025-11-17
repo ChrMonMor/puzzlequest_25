@@ -13,6 +13,7 @@ class RunTypeFactory extends Factory
     {
         return [
             'run_type_name' => $this->faker->word,
+            'run_type_icon' => $this->faker->imageUrl(100, 100, 'icons', true),
         ];
     }
 }

@@ -20,19 +20,25 @@
 
     <div class="runs-list" id="runs-list">
         @foreach($runs as $run)
+            @php
+                // Support both Eloquent objects and API JSON stdClass (snake_case relations)
+                $runTypeName = data_get($run, 'runType.run_type_name') ?? data_get($run, 'run_type.run_type_name');
+                $ownerName = data_get($run, 'user.user_name') ?? data_get($run, 'user.name');
+                $ownerId = $run->user_id ?? data_get($run, 'user.user_id');
+            @endphp
             {{-- Skip private runs unless the current user is the owner --}}
-            @if(optional($run->runType)->run_type_name === 'Private' && !(auth()->check() && auth()->user()->user_id === $run->user_id))
+            @if(($runTypeName === 'Private') && !(auth()->check() && auth()->user()->user_id === $ownerId))
                 @continue
             @endif
 
-            <div class="card" style="margin-bottom:.75rem" data-title="{{ strtolower($run->run_title ?? '') }}" data-owner="{{ strtolower(optional($run->user)->user_name ?? optional($run->user)->name ?? '') }}" data-pin="{{ $run->run_pin ?? '' }}">
+            <div class="card" style="margin-bottom:.75rem" data-title="{{ strtolower($run->run_title ?? '') }}" data-owner="{{ strtolower($ownerName ?? '') }}" data-pin="{{ $run->run_pin ?? '' }}">
                 <div style="display:flex; justify-content:space-between; gap:1rem; align-items:flex-start">
                     <div style="flex:1">
                         <h3 style="margin:0; font-size:1.05rem">
                             <a href="{{ route('runs.show', $run->run_id) }}">{{ $run->run_title ?? '(untitled)' }}</a>
                         </h3>
                         <div class="muted" style="font-size:.9rem; margin-top:.25rem">
-                            by {{ optional($run->user)->user_name ?? optional($run->user)->name ?? 'Unknown' }}
+                            by {{ $ownerName ?? 'Unknown' }}
                             @if(!empty($run->run_description))
                                 <p class="muted" style="margin-top:.65rem">{{ Str::limit($run->run_description, 180) }}</p>
                             @endif
@@ -112,7 +118,7 @@
                     if (replace) list.innerHTML = '';
                     for (const r of runs){
                         // Skip private runs unless owner (server also filters, but double-check)
-                        const runTypeName = (r.runType && r.runType.run_type_name) || '';
+                        const runTypeName = (r.runType && r.runType.run_type_name) || (r.run_type && r.run_type.run_type_name) || '';
                         const isPrivate = runTypeName === 'Private';
                         if (isPrivate && !(window.__auth_user_id && window.__auth_user_id === r.user_id)) continue;
                         list.insertAdjacentHTML('beforeend', renderRunCard(r));
@@ -164,11 +170,11 @@
                 }, 300);
             });
 
-            // initial load: unless this is the server-rendered "My Runs" page, replace the list with API-driven pagination
+            // initial load: only fetch if the server didn't render any items
             try{
                 window.__auth_user_id = (window.__auth_user_id !== undefined) ? window.__auth_user_id : null;
             }catch(e){ window.__auth_user_id = null; }
-            if (!window.__only_my_runs) {
+            if (!window.__only_my_runs && list.children.length === 0) {
                 fetchRunsPage(1, '', true);
             }
         })();

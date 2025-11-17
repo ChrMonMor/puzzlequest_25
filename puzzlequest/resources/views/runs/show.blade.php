@@ -7,7 +7,7 @@
         <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:1rem">
             <div style="flex:1">
                 <h2 class="text-xl font-semibold" style="margin:0">{{ $run->run_title ?? '(untitled)' }}</h2>
-                <div class="muted" style="margin-top:.25rem; font-size:.95rem">Created: {{ $run->run_added }} · By: {{ $run->user->user_name ?? $run->user->name ?? 'Unknown' }}</div>
+                <div class="muted" style="margin-top:.25rem; font-size:.95rem">Created: {{ $run->run_added }} · By: {{ optional($run->user)->user_name ?? optional($run->user)->name ?? 'Unknown' }}</div>
             </div>
 
             <div style="text-align:right">
@@ -19,6 +19,7 @@
                     <div>
                         <a href="{{ route('runs.edit', $run->run_id) }}" class="btn btn-primary">Edit</a>
                         <a href="{{ route('stats.run', $run->run_id) }}" class="btn btn-secondary" style="margin-left:.5rem">View stats</a>
+                        <a href="{{ route('runs.live', $run->run_id) }}" class="btn btn-secondary" style="margin-left:.5rem">Live map</a>
                     </div>
                 @else
                     <div>
@@ -33,10 +34,17 @@
         @endif
 
         <div style="margin-top:.75rem; display:flex; gap:1.5rem; align-items:center;">
-            <div><strong>Flags:</strong> {{ $run->flags ? $run->flags->count() : 0 }}</div>
-            <div><strong>Questions:</strong> {{ $run->questions ? $run->questions->count() : 0 }}</div>
-            @if(optional($run->runType)->run_type_name)
-                <div class="muted">Type: {{ optional($run->runType)->run_type_name }}</div>
+            @php
+                // Handle both Eloquent collections and JSON-decoded arrays
+                $flagsCount = is_array($run->flags ?? null) ? count($run->flags) : (isset($run->flags) && method_exists($run->flags, 'count') ? $run->flags->count() : 0);
+                $questionsCount = is_array($run->questions ?? null) ? count($run->questions) : (isset($run->questions) && method_exists($run->questions, 'count') ? $run->questions->count() : 0);
+                // Support both runType (Eloquent) and run_type (JSON) relation keys
+                $runTypeName = data_get($run, 'runType.run_type_name') ?? data_get($run, 'run_type.run_type_name');
+            @endphp
+            <div><strong>Flags:</strong> {{ $flagsCount }}</div>
+            <div><strong>Questions:</strong> {{ $questionsCount }}</div>
+            @if($runTypeName)
+                <div class="muted">Type: {{ $runTypeName }}</div>
             @endif
         </div>
 

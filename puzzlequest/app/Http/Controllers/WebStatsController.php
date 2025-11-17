@@ -29,8 +29,8 @@ class WebStatsController extends Controller
             }
         }
 
-        // Only the owner or an admin (is_admin truthy) may view another user's histories
-        if (!$currentUser || ($currentUser->user_id !== $userId && empty($currentUser->is_admin))) {
+        // Only the owner may view another user's histories
+        if (!$currentUser || ($currentUser->user_id !== $userId)) {
             abort(403, 'Not authorized to view this user histories');
         }
 

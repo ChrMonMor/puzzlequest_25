@@ -12,7 +12,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('flags', function (Blueprint $table) {
-            $table->id('flag_id')->primary();
+            $table->id('flag_id');
             $table->uuid('run_id');
             $table->integer('flag_number')->nullable();
             $table->double('flag_long');

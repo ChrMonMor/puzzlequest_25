@@ -54,14 +54,6 @@ class HistoryController extends Controller
 
             $run = Run::with('flags')->findOrFail($runId);
 
-            $validator = Validator::make($request->all(), [
-                'history_run_position' => 'nullable|string|max:255',
-            ]);
-
-            if ($validator->fails()) {
-                return response()->json(['errors' => $validator->errors()], 422);
-            }
-
             // Use transaction + locking to prevent duplicate active histories
             $history = DB::transaction(function () use ($actor, $run, $request) {
                 $existing = History::where('user_id', $actor['id'])
@@ -79,8 +71,7 @@ class HistoryController extends Controller
                     'run_id' => $run->run_id,
                     'history_start' => now(),
                     'history_run_type' => $run->run_type,
-                    'history_run_position' => $request->input('history_run_position'),
-                    'history_run_update' => $run->run_last_update,
+                    'history_run_update' => $run->run_last_update ?? $run->run_added,
                 ]);
 
                 foreach ($run->flags as $flag) {

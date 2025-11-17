@@ -44,7 +44,7 @@ class HistorySeeder extends Seeder
                         'run_id' => $run->run_id,
                         'history_start' => $startDate,
                         'history_end' => $ended,
-                        'history_run_update' => now(),
+                        'history_run_update' => $run->run_last_update,
                         'history_run_type' => $run->run_type,
                         'history_run_position' => random_int(1,10),
                     ]);
@@ -76,7 +76,7 @@ class HistorySeeder extends Seeder
                 'run_id' => $run->run_id,
                 'history_start' => $startDate,
                 'history_end' => null,
-                'history_run_update' => now(),
+                'history_run_update' => $run->run_last_update,
                 'history_run_type' => $run->run_type,
                 'history_run_position' => rand(0,10),
             ]);

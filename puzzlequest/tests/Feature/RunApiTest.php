@@ -2,41 +2,28 @@
 
 namespace Tests\Feature;
 
-use Tests\TestCase;
+use Tests\ApiTestCase;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Models\User;
 use App\Models\Run;
 use App\Models\Flag;
 use App\Models\RunType;
-use Tymon\JWTAuth\Facades\JWTAuth;
 
-class RunApiTest extends TestCase
+class RunApiTest extends ApiTestCase
 {
     use RefreshDatabase;
-
-    protected $user;
-    protected $token;
 
     protected function setUp(): void
     {
         parent::setUp();
 
-        // Create user
-        $this->user = User::factory()->create();
+        // Authenticate user via ApiTestCase helper
+        $this->authenticate();
 
         // Ensure there is at least one run type for FK constraints
-        RunType::create(['run_type_name' => 'Default']);
-
-        // Generate JWT token
-        $this->token = JWTAuth::fromUser($this->user);
-    }
-
-    // Helper to add Authorization header
-    protected function withAuthToken($token = null)
-    {
-        return $this->withHeaders([
-            'Authorization' => 'Bearer ' . ($token ?? $this->token),
-        ]);
+        if (!RunType::first()) {
+            RunType::factory()->create(['run_type_name' => 'Default']);
+        }
     }
 
     /** @test */
@@ -48,7 +35,7 @@ class RunApiTest extends TestCase
             'run_description' => 'A test run',
         ];
 
-        $response = $this->withAuthToken()->postJson('/api/runs', $data);
+        $response = $this->withToken()->postJson('/api/runs', $data);
 
         $response->assertStatus(201)
                  ->assertJsonStructure([
@@ -69,7 +56,7 @@ class RunApiTest extends TestCase
     {
         $run = Run::factory()->create(['user_id' => $this->user->user_id]);
 
-        $response = $this->withAuthToken()->putJson("/api/runs/{$run->run_id}", [
+        $response = $this->withToken()->putJson("/api/runs/{$run->run_id}", [
             'run_title' => 'Updated Run',
         ]);
 
@@ -82,7 +69,7 @@ class RunApiTest extends TestCase
     {
         $run = Run::factory()->create(['user_id' => $this->user->user_id]);
 
-        $response = $this->withAuthToken()->deleteJson("/api/runs/{$run->run_id}");
+        $response = $this->withToken()->deleteJson("/api/runs/{$run->run_id}");
 
         $response->assertStatus(200)
                  ->assertJson(['message' => 'Run deleted']);
@@ -101,7 +88,7 @@ class RunApiTest extends TestCase
             'flag_number' => $f->flag_number + 10,
         ])->toArray();
 
-        $response = $this->withAuthToken()->putJson("/api/runs/{$run->run_id}/flags/bulk", $payload);
+        $response = $this->withToken()->putJson("/api/runs/{$run->run_id}/flags/bulk", $payload);
 
         $response->assertStatus(200)
                  ->assertJson(['message' => 'Flags updated']);
@@ -122,8 +109,8 @@ class RunApiTest extends TestCase
 
         $flagIds = $flags->pluck('flag_id')->toArray();
 
-        $response = $this->withAuthToken()->deleteJson("/api/runs/{$run->run_id}/flags/bulk", [
-            'flag_ids' => $flagIds,
+        $response = $this->withToken()->deleteJson("/api/runs/{$run->run_id}/flags/bulk", [
+            'ids' => $flagIds,
         ]);
 
         $response->assertStatus(200)

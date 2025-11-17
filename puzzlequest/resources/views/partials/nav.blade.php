@@ -10,7 +10,13 @@
 
     <div style="display:flex;align-items:center;gap:.6rem">
         @if(auth()->check())
-            <span class="muted">Welcome, {{ auth()->user()->user_name ?? auth()->user()->name ?? 'User' }}</span>
+            <a href="{{ route('profile') }}" class="muted" style="display:inline-flex;align-items:center;gap:.5rem;text-decoration: none; cursor: pointer;" title="View profile">
+                <span>Welcome, {{ auth()->user()->user_name ?? auth()->user()->name ?? 'User' }}</span>
+                @php $avatar = auth()->user()->user_img ?? null; @endphp
+                @if($avatar)
+                    <img src="{{ asset('images/profiles/' . $avatar) }}" alt="Avatar" style="width:28px;height:28px;border-radius:9999px;object-fit:cover;border:1px solid var(--color-border, #e5e7eb);" />
+                @endif
+            </a>
             <form method="POST" action="{{ route('logout') }}" style="display:inline">
                 @csrf
                 <button type="submit" class="btn btn-secondary">Logout</button>

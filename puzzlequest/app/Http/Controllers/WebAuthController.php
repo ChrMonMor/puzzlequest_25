@@ -4,12 +4,14 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Http;
 use App\Models\User;
 use Tymon\JWTAuth\Facades\JWTAuth;
 use Illuminate\Http\Request as HttpRequest;
+use Illuminate\Validation\Rule;
 
 class WebAuthController extends Controller
 {
@@ -210,44 +212,52 @@ class WebAuthController extends Controller
             'password' => $request->input('password'),
         ];
 
-    // Call internal API register route
-        $symRequest = Request::create('/api/register', 'POST', $payload, [], [], ['HTTP_ACCEPT' => 'application/json']);
-        $symResponse = app()->handle($symRequest);
-        $status = $symResponse->getStatusCode();
-        $body = json_decode($symResponse->getContent(), true) ?: [];
+        try {
+            $registerResponse = Http::asForm()->post(url('/api/register'), $payload);
 
-        if ($status >= 200 && $status < 300) {
-            // Find the created user and create a token directly (upgrade flow should log the
-            // user in immediately). This avoids requiring email verification for the
-            // upgrade-to-user flow (tests and UX expect immediate login).
-            $user = User::where('user_email', $request->input('email'))->first();
-            if ($user) {
-                try {
-                    $token = JWTAuth::fromUser($user);
+            if ($registerResponse->successful()) {
+                $loginResponse = Http::asForm()->post(url('/api/login'), [
+                    'email' => $payload['email'],
+                    'password' => $payload['password'],
+                ]);
+
+                if ($loginResponse->successful()) {
+                    $respBody = $loginResponse->json();
+                    $token = $respBody['token'] ?? ($respBody['access_token'] ?? null);
+
                     if ($token) {
-                        session(['jwt_token' => $token]);
+                        session(['api_token' => $token, 'jwt_token' => $token]);
+
+                        try {
+                            $user = JWTAuth::setToken($token)->toUser();
+                            if ($user) {
+                                Auth::login($user);
+                                $request->session()->regenerate();
+                            }
+                        } catch (\Throwable $e) {
+                            // ignore token parse failures for web guard
+                        }
                     }
-                    Auth::login($user);
-                } catch (\Exception $e) {
-                    // If token creation fails, fall back to redirect to login
+
                     session()->forget('guest');
-                    return redirect()->route('login')->with('success', $body['message'] ?? 'Account created, please verify email.');
+                    return redirect()->to($request->getSchemeAndHttpHost() . '/')->with('success', 'Account created');
                 }
 
+                // If login failed, clear guest and send to login
                 session()->forget('guest');
-                return redirect()->to($request->getSchemeAndHttpHost() . '/')->with('success', $body['message'] ?? 'Account created');
+                return redirect()->route('login')->with('success', 'Account created, please verify email.');
             }
 
-            // If no local user found after creation, fall back to the login route
-                session()->forget('guest');
-                return redirect()->route('login')->with('success', $body['message'] ?? 'Account created, please verify email.');
-        }
+            if ($registerResponse->status() === 422) {
+                $errors = $registerResponse->json('errors') ?? ['error' => 'Validation failed'];
+                return back()->withErrors($errors)->withInput();
+            }
 
-        if ($status === 422) {
-            return back()->withErrors($body['errors'] ?? ['error' => 'Validation failed'])->withInput();
+            $message = $registerResponse->json('message') ?? 'Upgrade failed';
+            return back()->withErrors(['error' => $message])->withInput();
+        } catch (\Exception $e) {
+            return back()->withErrors(['error' => 'Upgrade request failed: ' . $e->getMessage()])->withInput();
         }
-
-        return back()->withErrors(['error' => $body['message'] ?? 'Upgrade failed'])->withInput();
     }
 
     public function endGuest(Request $request)
@@ -257,5 +267,213 @@ class WebAuthController extends Controller
         }
 
         return redirect()->to($request->getSchemeAndHttpHost() . '/')->with('success', 'Guest session ended');
+    }
+    public function me(Request $request)
+    {
+        return view('auth.profile');
+    }
+
+    public function showEditProfile()
+    {
+        $dir = public_path('images/profiles');
+        $files = File::exists($dir) ? collect(File::files($dir)) : collect();
+        $profileImages = $files
+            ->filter(function ($f) {
+                $ext = strtolower($f->getExtension());
+                return in_array($ext, ['png','jpg','jpeg','gif','webp']);
+            })
+            ->map(function ($f) { return $f->getFilename(); })
+            ->values()
+            ->all();
+
+        return view('auth.edit-profile', [
+            'profileImages' => $profileImages,
+        ]);
+    }
+
+    public function updateProfile(Request $request)
+    {
+        // Build allowed image choices from public/profiles for validation
+        $dir = public_path('images/profiles');
+        $files = File::exists($dir) ? collect(File::files($dir)) : collect();
+        $choices = $files
+            ->filter(function ($f) {
+                $ext = strtolower($f->getExtension());
+                return in_array($ext, ['png','jpg','jpeg','gif','webp']);
+            })
+            ->map(function ($f) { return $f->getFilename(); })
+            ->values()
+            ->all();
+
+        $request->validate([
+            'username' => 'required|string|max:255',
+            'user_img' => ['nullable','string', Rule::in($choices)],
+        ]);
+
+        // Call internal API update-profile endpoint
+        try {
+            $token = $request->session()->get('jwt_token');
+            if (!$token) {
+                return redirect()->route('login')->with('error', 'Please log in.');
+            }
+
+            $apiRequest = Request::create('/api/update-profile', 'PATCH', [
+                'username' => $request->input('username'),
+                'image' => $request->input('user_img'),
+            ], [], [], [
+                'HTTP_ACCEPT' => 'application/json',
+                'HTTP_AUTHORIZATION' => 'Bearer ' . $token
+            ]);
+
+            $apiResponse = app()->handle($apiRequest);
+            $status = $apiResponse->getStatusCode();
+
+            if ($status >= 200 && $status < 300) {
+                return redirect()->route('profile')->with('success', 'Profile updated successfully!');
+            }
+
+            $body = json_decode($apiResponse->getContent(), true) ?: [];
+            $errors = $body['errors'] ?? ['error' => [$body['message'] ?? 'Failed to update profile']];
+            return back()->withErrors($errors)->withInput();
+        } catch (\Exception $e) {
+            return back()->withErrors(['error' => 'Failed to update profile: ' . $e->getMessage()])->withInput();
+        }
+    }
+
+    public function showChangePassword()
+    {
+        return view('auth.change-password');
+    }
+
+    public function changePassword(Request $request)
+    {
+        $user = Auth::user();
+
+        $request->validate([
+            'current_password' => 'required|string',
+            'password' => 'required|string|min:6|confirmed',
+        ]);
+
+        // Verify current password
+        if (!Hash::check($request->input('current_password'), $user->user_password)) {
+            return back()->withErrors(['current_password' => 'Current password is incorrect.'])->withInput();
+        }
+
+        try {
+            $user->user_password = Hash::make($request->input('password'));
+            $user->save();
+
+            return redirect()->route('profile')->with('success', 'Password changed successfully!');
+        } catch (\Exception $e) {
+            return back()->withErrors(['error' => 'Failed to change password: ' . $e->getMessage()]);
+        }
+    }
+
+    public function deleteAccount(Request $request)
+    {
+        // Call internal API delete endpoint
+        try {
+            $token = $request->session()->get('jwt_token');
+            if (!$token) {
+                return redirect()->route('login')->with('error', 'Please log in.');
+            }
+
+            $apiRequest = Request::create('/api/delete', 'DELETE', [], [], [], [
+                'HTTP_ACCEPT' => 'application/json',
+                'HTTP_AUTHORIZATION' => 'Bearer ' . $token
+            ]);
+
+            $apiResponse = app()->handle($apiRequest);
+            $status = $apiResponse->getStatusCode();
+
+            // Log out the user session
+            Auth::logout();
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+
+            if ($status >= 200 && $status < 300) {
+                return redirect('/')->with('success', 'Your account has been deleted successfully.');
+            }
+
+            return redirect('/')->with('error', 'Failed to delete account.');
+        } catch (\Exception $e) {
+            return back()->withErrors(['error' => 'Failed to delete account: ' . $e->getMessage()]);
+        }
+    }
+
+    /**
+     * Show the forgot password form
+     */
+    public function showForgotPassword()
+    {
+        return view('auth.forgot-password');
+    }
+
+    /**
+     * Send password reset email
+     */
+    public function sendResetLink(Request $request)
+    {
+        // Call internal API forgot-password endpoint
+        try {
+            $apiRequest = HttpRequest::create('/api/forgot-password', 'POST', [
+                'email' => $request->input('email'),
+            ], [], [], ['HTTP_ACCEPT' => 'application/json']);
+
+            $apiResponse = app()->handle($apiRequest);
+            $status = $apiResponse->getStatusCode();
+            $body = json_decode($apiResponse->getContent(), true) ?: [];
+
+            if ($status >= 200 && $status < 300) {
+                return back()->with('success', 'Password reset link has been sent to your email.');
+            }
+
+            // Handle API errors
+            $errors = $body['errors'] ?? ['email' => [$body['message'] ?? 'Failed to send reset link']];
+            return back()->withErrors($errors);
+        } catch (\Exception $e) {
+            return back()->withErrors(['email' => 'An error occurred. Please try again.']);
+        }
+    }
+
+    /**
+     * Show the reset password form
+     */
+    public function showResetPassword(Request $request)
+    {
+        return view('auth.reset-password', [
+            'token' => $request->token,
+            'email' => $request->email
+        ]);
+    }
+
+    /**
+     * Process password reset
+     */
+    public function resetPassword(Request $request)
+    {
+        // Call internal API reset-password endpoint
+        try {
+            $apiRequest = HttpRequest::create('/api/reset-password', 'POST', [
+                'email' => $request->input('email'),
+                'token' => $request->input('token'),
+                'password' => $request->input('password'),
+                'password_confirmation' => $request->input('password_confirmation'),
+            ], [], [], ['HTTP_ACCEPT' => 'application/json']);
+
+            $apiResponse = app()->handle($apiRequest);
+            $status = $apiResponse->getStatusCode();
+            $body = json_decode($apiResponse->getContent(), true) ?: [];
+
+            if ($status >= 200 && $status < 300) {
+                return redirect()->route('login')->with('success', 'Password reset successfully. You can now login with your new password.');
+            }
+
+            // Handle API errors
+            $errors = $body['errors'] ?? ['token' => [$body['message'] ?? 'Failed to reset password']];
+            return back()->withErrors($errors);
+        } catch (\Exception $e) {
+            return back()->withErrors(['error' => 'An error occurred. Please try again.']);
+        }
     }
 }

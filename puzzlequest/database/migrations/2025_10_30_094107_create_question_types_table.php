@@ -12,7 +12,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('question_types', function (Blueprint $table) {
-            $table->id('question_type_id')->primary();
+            $table->id('question_type_id');
             $table->string('question_type_name', 255);
         });
     }

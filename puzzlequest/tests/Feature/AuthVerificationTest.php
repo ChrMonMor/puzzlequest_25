@@ -39,22 +39,23 @@ class AuthVerificationTest extends TestCase
 
     public function test_verify_email_with_valid_token_marks_user_verified()
     {
-        // Register via endpoint (which stores a hashed token in cache)
+        // Seed the cache the same way register() does, then verify with the raw token
         $email = 'verify@example.com';
+        $username = 'verifyuser';
+        $password = 'password';
 
-        $resp = $this->postJson('/api/register', [
-            'username' => 'verifyuser',
+        $rawToken = 'test-raw-token-1234567890';
+        $hashedToken = \Illuminate\Support\Facades\Hash::make($rawToken);
+
+        Cache::put('verify_' . $email, [
+            'hashed_token' => $hashedToken,
+            'username' => $username,
+            'password_hash' => \Illuminate\Support\Facades\Hash::make($password),
             'email' => $email,
-            'password' => 'password',
-        ]);
+        ], 3600);
 
-        $resp->assertStatus(200);
-
-        $cached = Cache::get('verify_' . $email);
-        $this->assertNotEmpty($cached, 'Expected verify token in cache after registration');
-
-        // Call verify endpoint with the same token that was cached
-        $verifyResp = $this->getJson('/api/verify-email?email=' . urlencode($email) . '&token=' . urlencode($cached));
+        // Call verify endpoint with the raw token
+        $verifyResp = $this->getJson('/api/verify-email?email=' . urlencode($email) . '&token=' . urlencode($rawToken));
         $verifyResp->assertStatus(200);
 
         $this->assertDatabaseHas('users', [
