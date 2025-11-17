@@ -329,7 +329,7 @@ class WebAuthController extends Controller
             $status = $apiResponse->getStatusCode();
 
             if ($status >= 200 && $status < 300) {
-                return redirect()->route('profile')->with('success', 'Profile updated successfully!');
+                return redirect()->to(route('profile', [], false))->with('success', 'Profile updated successfully!');
             }
 
             $body = json_decode($apiResponse->getContent(), true) ?: [];
@@ -363,7 +363,7 @@ class WebAuthController extends Controller
             $user->user_password = Hash::make($request->input('password'));
             $user->save();
 
-            return redirect()->route('profile')->with('success', 'Password changed successfully!');
+            return redirect()->to(route('profile', [], false))->with('success', 'Password changed successfully!');
         } catch (\Exception $e) {
             return back()->withErrors(['error' => 'Failed to change password: ' . $e->getMessage()]);
         }

@@ -25,7 +25,7 @@
         @endif
 
         <div class="card" style="margin-top: 1.5rem;">
-            <form method="POST" action="{{ route('profile.update') }}">
+            <form method="POST" action="{{ route('profile.update', [], false) }}">
                 @csrf
                 @method('PUT')
 
@@ -72,7 +72,7 @@
                     <button type="submit" class="btn btn-primary">
                         Save Changes
                     </button>
-                    <a href="{{ route('profile') }}" class="btn btn-secondary">
+                    <a href="{{ route('profile', [], false) }}" class="btn btn-secondary">
                         Cancel
                     </a>
                 </div>

@@ -22,24 +22,28 @@ class UserSeeder extends Seeder
                 'user_email' => 'aan@example.com',
                 'user_password' => Hash::make('password123'),
                 'user_verified' => true,
+                'user_img'=> 'androgynousDefault.png',
             ],
             [
                 'user_name' => 'San',
                 'user_email' => 'san@example.com',
                 'user_password' => Hash::make('password123'),
                 'user_verified' => false,
+                'user_img'=> 'androgynousDefault.png',
             ],
             [
                 'user_name' => 'Dan',
                 'user_email' => 'dan@example.com',
                 'user_password' => Hash::make('password123'),
                 'user_verified' => true,
+                'user_img'=> 'androgynousDefault.png',
             ],
             [
                 'user_name' => 'player',
                 'user_email' => 'player@example.com',
                 'user_password' => Hash::make('password123'),
                 'user_verified' => true,
+                'user_img'=> 'androgynousDefault.png',
             ],
         ];
 
