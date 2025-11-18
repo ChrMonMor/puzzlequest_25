@@ -240,7 +240,7 @@ class AuthController extends Controller
         Cache::put('password_resets_' . $email, $hashedToken, now()->addHour());
 
         // Use web route for user-friendly reset page
-        $resetUrl = route('password.reset', ['token' => $rawToken, 'email' => $email]);
+        $resetUrl = route($request->getSchemeAndHttpHost() . '/password.reset', ['token' => $rawToken, 'email' => $email]);
 
         Mail::raw("Click the link to reset your password: $resetUrl", function ($message) use ($email) {
             $message->to($email)->subject('Reset your password');

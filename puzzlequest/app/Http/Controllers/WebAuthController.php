@@ -363,7 +363,7 @@ class WebAuthController extends Controller
             $user->user_password = Hash::make($request->input('password'));
             $user->save();
 
-            return redirect()->to(route('profile', [], false))->with('success', 'Password changed successfully!');
+            return redirect()->to($request->getSchemeAndHttpHost() . '/profile')->with('success', 'Password changed successfully!');
         } catch (\Exception $e) {
             return back()->withErrors(['error' => 'Failed to change password: ' . $e->getMessage()]);
         }
@@ -392,10 +392,10 @@ class WebAuthController extends Controller
             $request->session()->regenerateToken();
 
             if ($status >= 200 && $status < 300) {
-                return redirect('/')->with('success', 'Your account has been deleted successfully.');
+                return redirect($request->getSchemeAndHttpHost() . '/')->with('success', 'Your account has been deleted successfully.');
             }
 
-            return redirect('/')->with('error', 'Failed to delete account.');
+            return redirect($request->getSchemeAndHttpHost() . '/')->with('error', 'Failed to delete account.');
         } catch (\Exception $e) {
             return back()->withErrors(['error' => 'Failed to delete account: ' . $e->getMessage()]);
         }
@@ -466,7 +466,7 @@ class WebAuthController extends Controller
             $body = json_decode($apiResponse->getContent(), true) ?: [];
 
             if ($status >= 200 && $status < 300) {
-                return redirect()->route('login')->with('success', 'Password reset successfully. You can now login with your new password.');
+                return redirect()->to($request->getSchemeAndHttpHost() . '/login')->with('success', 'Password reset successfully. You can now login with your new password.');
             }
 
             // Handle API errors
