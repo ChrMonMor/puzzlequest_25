@@ -25,7 +25,7 @@
         @endif
 
         <div class="card" style="margin-top: 1.5rem;">
-            <form method="POST" action="{{ route('profile.update', [], false) }}">
+            <form method="POST" action="{{ route('profile.update', [], true) }}">
                 @csrf
                 @method('PUT')
 

@@ -329,7 +329,7 @@ class WebAuthController extends Controller
             $status = $apiResponse->getStatusCode();
 
             if ($status >= 200 && $status < 300) {
-                return redirect()->to(route('profile', [], false))->with('success', 'Profile updated successfully!');
+                return redirect()->to($request->getSchemeAndHttpHost() . '/profile')->with('success', 'Profile updated successfully!');
             }
 
             $body = json_decode($apiResponse->getContent(), true) ?: [];
