@@ -30,7 +30,7 @@
         .dark {
             --map-green: #4A9E5A;
             --trail-blue: #358AAE;
-            --puzzle-navy: #1C3B4D;
+            --puzzle-navy: #28526a;
             --sun-yellow: #DCA93E;
             --accent-orange: #E05F2D;
             --sky-blue: #588BAF;
