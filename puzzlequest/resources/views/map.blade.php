@@ -56,12 +56,6 @@
         <div class="sidebar bg-white p-4 rounded shadow-sm">
             <h3 class="font-semibold mb-2">Pins & Questions</h3>
 
-            <!-- Pin selector -->
-            <label class="block text-sm font-medium">Select Pin:</label>
-            <select id="pin-selector" class="w-full border-gray-300 rounded-md p-2 mb-3">
-                <option value="">-- Select a pin --</option>
-            </select>
-
             <!-- Questions container -->
             <div class="mb-3">
                 <label class="block text-sm font-medium">Default question type</label>
