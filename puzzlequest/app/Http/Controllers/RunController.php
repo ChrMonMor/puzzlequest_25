@@ -100,9 +100,10 @@ class RunController extends Controller
         try {
             $run = Run::with([
                 'runType',
-                'flags.questions.options',
-                'questions.options',
-                'questions.questionType'
+                'flags' => function ($query) {
+                    $query->orderBy('flag_number', 'asc');
+                },
+                'flags.questions.options'
             ])->findOrFail($id);
 
             return response()->json($run, 200);
