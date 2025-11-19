@@ -38,7 +38,7 @@ class HistorySeeder extends Seeder
                 $plays = rand(1, max(1, 3 * $scale));
                 for ($p = 0; $p < $plays; $p++) {
                     $startDate = now()->subDays(rand(1, 60))->subHours(rand(0,23))->subMinutes(rand(0,59));
-                    $ended = rand(0,100) > 20 ? $startDate->copy()->addMinutes(rand(10, 120)) : null; // some plays unfinished
+                    $ended = $startDate->copy()->addMinutes(rand(10, 120)); 
                     $history = History::create([
                         'user_id' => $user->user_id,
                         'run_id' => $run->run_id,
