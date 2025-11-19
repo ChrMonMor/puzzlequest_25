@@ -65,7 +65,7 @@ class HistoryController extends Controller
                     ->first();
 
                 if ($existing) {
-                    throw new Exception('You already have an active history for this run.');
+                    return $existing;
                 }
 
                 $h = History::create([
@@ -93,14 +93,16 @@ class HistoryController extends Controller
 
             $history->load(['flags', 'run']);
 
+            $status = $history->wasRecentlyCreated ? 201 : 200;
+            $message = $history->wasRecentlyCreated ? 'Run started successfully' : 'Active run already exists';
+
             return response()->json([
-                'message' => 'Run started successfully',
+                'message' => $message,
                 'history' => $history
-            ], 201);
+            ], $status);
 
         } catch (Exception $e) {
-            $status = $e->getMessage() === 'You already have an active history for this run.' ? 409 : 500;
-            return response()->json(['error' => $e->getMessage()], $status);
+            return response()->json(['error' => $e->getMessage()], 500);
         }
     }
 
