@@ -52,7 +52,9 @@ class HistoryController extends Controller
                 return response()->json(['error' => 'Unauthorized. Please log in or provide guest token.'], 401);
             }
 
-            $run = Run::with('flags')->findOrFail($runId);
+            $run = Run::with(['flags' => function ($query) {
+                $query->orderBy('flag_number', 'asc');
+            }])->findOrFail($runId);
 
             // Use transaction + locking to prevent duplicate active histories
             $history = DB::transaction(function () use ($actor, $run, $request) {
